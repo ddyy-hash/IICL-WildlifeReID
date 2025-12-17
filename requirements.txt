@@ -1,0 +1,17 @@
+celery
+matplotlib
+numpy
+opencv-python
+Pillow
+PyYAML
+seaborn
+# 建议根据官方指引单独安装 PyTorch GPU 版
+# 例如（CUDA 11.8）：
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+torch
+torchreid
+torchvision
+tqdm
+WTForms
+ultralytics
+gdown
