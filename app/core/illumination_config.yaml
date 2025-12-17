@@ -1,0 +1,225 @@
+# ATRW (东北虎) ReID 训练配置
+# 基于 IPAID + IICL 的光照不变重识别系统
+# 适用数据集: ATRW, 可调整参数适配其他野生动物数据集
+
+# =============================================================================
+# IPAID 模块配置（Identity-Preserving Adaptive Illumination Decomposition）
+# =============================================================================
+illumination_module:
+  module_type: "IPAIDModule"  # 基于 Retinex 的物理光照分解模块
+  
+  # IPAID 损失函数权重（经过消融实验调优）
+  loss_params:
+    lambda_recon: 1.0         # 重建损失：||R × L - I||，保证分解的正确性
+    lambda_smooth: 0.15       # 光照平滑损失（TV正则），假设光照变化平滑
+    lambda_edge: 0.08         # 反射层边缘保持，保留纹理细节（老虎条纹关键）
+    lambda_sensitivity: 0.02  # 敏感度正则化，防止过度校正
+    lambda_identity: 0.1      # 身份保持损失权重（在train_joint中使用）
+    
+  # IPAID 模块结构参数
+  module_params:
+    base_channels: 32         # 基础通道数（轻量化设计）
+    num_scales: 3             # 多尺度光照估计：1/1, 1/2, 1/4
+    refine_iterations: 2      # 一致性精炼迭代次数（增加到2次）
+    use_sensitivity: true     # 使用敏感度图（关键创新点）
+    use_refinement: true      # 使用一致性精炼模块
+
+# =============================================================================
+# 训练超参数配置
+# =============================================================================
+training:
+  # 基础参数
+  batch_size: 32              # 批次大小（需配合 PK 采样器）
+  # 图像尺寸配置（支持非正方形）
+  # 各数据集推荐尺寸：
+  #   - ATRW (Tiger):     256 x 512  (横向老虎躯体)
+  #   - Market-1501:      256 x 128  (垂直行人)
+  #   - DukeMTMC-reID:    256 x 128  (垂直行人)
+  #   - Lion/Nyala:       224 x 224  (动物面部/侧身)
+  #   - Leopard/WhaleShark: 256 x 256 (通用)
+  image_height: 256           # 输入图像高度
+  image_width: 256            # 输入图像宽度
+  image_size: 256             # 兼容旧配置（正方形时使用）
+  num_workers: 4              # 数据加载线程数
+  
+  # 学习率配置
+  learning_rate: 0.00035      # 基础学习率 (3.5e-4)
+  weight_decay: 0.01          # L2 正则化（增强防过拟合）
+  
+  # PK采样器参数
+  # ATRW 数据分布均匀，可启用 PK 采样配合 Triplet Loss
+  pk_sampler:
+    enabled: true             # 启用：ATRW 每个ID都有足够样本
+    p: 8                      # 每batch采样P个身份
+    k: 4                      # 每身份采样K张图像（ATRW样本充足）
+  
+  # Center Loss 参数
+  center_loss:
+    enabled: true
+    weight: 0.0005            # 权重要小，避免压缩类间距离
+    feat_dim: 256             # 特征维度
+    lr_scale: 0.5             # centers学习率 = base_lr × lr_scale
+  
+  # ==========================================================================
+  # 两阶段训练策略
+  # Phase 1: 先预热backbone，让网络学会基础特征表示
+  # Phase 2: 联合训练IPAID+IICL，学习光照不变特征
+  # ==========================================================================
+  phases:
+    phase1:
+      name: "backbone_warmup"   # 阶段名称
+      epochs: 10                # 预热轮数，让backbone收敛到稳定状态
+      freeze_backbone: false    # 训练backbone，学习基础特征
+      freeze_illumination: true # 冻结光照模块，避免干扰backbone学习
+      illumination_weight: 0.0  # 不计算光照损失
+      reid_weight: 1.0          # 仅用ReID损失监督
+      lr_scheduler: "warmup_cosine"
+      warmup_epochs: 2
+      
+    phase2:
+      name: "joint_training"    # 联合训练阶段
+      epochs: 100               # 主训练轮数
+      freeze_backbone: false    # 全部解冻，端到端优化
+      freeze_illumination: false
+      illumination_weight: 0.2  # 光照损失作为正则化，权重较小
+      reid_weight: 1.0          # ReID任务主导训练方向
+      illumination_lr: 0.00005  # 光照模块用更小学习率，保持稳定
+      lr_scheduler: "cosine"
+      min_lr: 0.000001
+  
+  # 梯度裁剪
+  gradient_clip: 1.0
+  
+  # 早停策略
+  early_stopping:
+    enabled: true
+    patience: 30              # 30 epoch 无提升则停止
+    monitor: "mAP"            # 监控 mAP 指标
+    min_delta: 0.001          # 最小提升阈值
+  
+  # 度量学习损失配置
+  # 注意：对于长尾分布数据集，禁用 Triplet/Circle，使用 ArcFace + IICL
+  metric_learning:
+    # 交叉熵损失
+    ce_loss:
+      enabled: true
+      label_smoothing: 0.2    # 标签平滑增强（防过拟合）
+      weight: 1.0
+    
+    # ArcFace Loss（代理损失，增强类间可分性）
+    arcface_loss:
+      enabled: true
+      weight: 0.5             # 与 Triplet 配合使用
+      s: 30.0                 # 缩放因子
+      m: 0.25                 # 角度边距（降低防过拟合）
+    
+    # Triplet Loss（ATRW 启用：数据分布均匀，正样本充足）
+    triplet_loss:
+      enabled: true
+      margin: 0.3             # margin 值
+      mining_type: "soft"     # soft mining 更稳定
+      weight: 1.0             # 启用
+    
+    # Circle Loss（禁用：同Triplet）
+    circle_loss:
+      enabled: false
+      margin: 0.25
+      gamma: 256              # 缩放因子
+      weight: 0.0             # 禁用
+    
+    # Center Loss
+    center_loss:
+      enabled: true
+      weight: 0.0005          # 权重很小但有效
+
+  # IICL 配置（光照不变对比学习 - 核心创新）
+  # 日志验证: IICL Loss: weight=1.0, enabled=True, variants=2
+  iicl:
+    enabled: true
+    weight: 1.0               # 日志验证
+    temperature: 0.07
+    variants: 2               # 每张图生成2个光照变体
+    memory_size: 1024
+    momentum: 0.9
+
+# =============================================================================
+# 数据增强配置（针对老虎纹理特征优化）
+# =============================================================================
+data_augmentation:
+  # 几何变换
+  random_horizontal_flip: 0.5
+  random_rotation: 15         # ±15度
+  random_crop:
+    enabled: true
+    scale: [0.85, 1.0]        # 保留更多身体区域
+    ratio: [0.9, 1.1]
+  random_erasing:
+    enabled: true
+    probability: 0.5
+    scale: [0.02, 0.2]        # 遮挡比例
+    ratio: [0.3, 3.3]
+  
+  # 颜色变换（减小幅度，避免与光照模块冲突）
+  color_jitter:
+    brightness: 0.1           # 亮度（小幅度）
+    contrast: 0.1             # 对比度
+    saturation: 0.1           # 饱和度
+    hue: 0.02                 # 色调
+  
+  # 归一化参数（ImageNet标准）
+  normalize:
+    mean: [0.485, 0.456, 0.406]
+    std: [0.229, 0.224, 0.225]
+
+# =============================================================================
+# 评估配置
+# =============================================================================
+evaluation:
+  eval_interval: 5            # 每5个epoch评估一次
+  reranking:
+    enabled: false            # 是否使用 k-reciprocal reranking
+    k1: 20
+    k2: 6
+    lambda_value: 0.3
+  
+  # 特征提取
+  feature_extraction:
+    flip_test: true           # 测试时水平翻转增强
+    normalize: true           # L2 归一化
+
+# =============================================================================
+# 模型保存配置
+# =============================================================================
+checkpointing:
+  save_interval: 10           # 每10个epoch保存
+  save_best_only: false       # 是否只保存最佳模型
+  max_keep: 5                 # 最多保留检查点数
+
+# =============================================================================
+# 日志配置
+# =============================================================================
+logging:
+  log_interval: 20            # 每20个batch打印一次
+  tensorboard: true           # 启用 TensorBoard
+  wandb:
+    enabled: false            # 是否使用 W&B
+    project: "tiger-reid"
+    entity: null
+
+# =============================================================================
+# YOLO 分割配置
+# =============================================================================
+yolo:
+  model_path: "fea_data/yolov8m-seg.pt"
+  conf_threshold: 0.3
+  iou_threshold: 0.5
+  use_soft_mask: true         # 使用软掩码注意力
+
+# =============================================================================
+# 硬件配置
+# =============================================================================
+hardware:
+  device: "cuda"
+  num_workers: 4
+  pin_memory: true
+  prefetch_factor: 2
