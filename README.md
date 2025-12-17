@@ -42,7 +42,8 @@ A state-of-the-art wildlife re-identification system featuring **IPAID** (Identi
 |---------|---------|------|---------|--------|-----|
 | ATRW (Closed) | Amur Tiger | 107 | 1,887 | **97.88%** | **79.15%** |
 | ATRW (Open-Single) | Amur Tiger | 182 | 1,764 | **86.02%** | **64.71%** |
-| GZGC | Grevy's Zebra | 1,033 | 3,851 | **71.16%** | **68.77%** |
+| GZGC-Zebra | Grevy's Zebra | 1,033 | 3,851 | **71.16%** | **68.77%** |
+| GZGC-Giraffe | Masai Giraffe | 109 | 420 | **62.60%** | **61.16%** |
 | StripeSpotter | Plains Zebra | 44 | 565 | **96.00%** | **93.20%** |
 
 ## Technical Innovation
