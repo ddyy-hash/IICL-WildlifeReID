@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """\
-可视化光照归一效果脚本（增强版）
+可视化光照归一效果脚本
 
 功能：
     - 加载已训练好的 JointReIDModel checkpoint
@@ -664,3 +664,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
