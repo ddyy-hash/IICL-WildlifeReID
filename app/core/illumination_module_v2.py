@@ -2,7 +2,7 @@
 """
 Identity-Preserving Adaptive Illumination Decomposition Module (IPAID)
 
-TCSVT级别的光照不变性模块，核心创新点：
+光照不变性模块，核心创新点：
 1. 基于Retinex的物理光照分解 (I = R × L)
 2. 多尺度光照估计 (全局 + 局部)
 3. 自适应校正强度 (敏感度图引导)
@@ -1185,3 +1185,4 @@ def test_ipaid_module():
 
 if __name__ == "__main__":
     test_ipaid_module()
+
