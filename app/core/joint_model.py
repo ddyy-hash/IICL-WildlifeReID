@@ -14,7 +14,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchreid
 
-# 使用 IPAID 模块替代 v1 掩码模块（TCSVT 级别的 Retinex 光照分解）
+# 使用 IPAID 模块替代 v1 掩码模块（Retinex 光照分解）
 from .illumination_module_v2 import IPAIDModule, IlluminationVariantGenerator, IlluminationContrastiveLoss
 
 
@@ -627,3 +627,4 @@ class JointReIDModel(nn.Module):
         }
         
         return output
+
