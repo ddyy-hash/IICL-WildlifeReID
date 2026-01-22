@@ -6,7 +6,7 @@
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F  # 修复：添加缺失的F导入
+import torch.nn.functional as F 
 import numpy as np
 from typing import Dict, List, Tuple, Optional, Any
 import logging
