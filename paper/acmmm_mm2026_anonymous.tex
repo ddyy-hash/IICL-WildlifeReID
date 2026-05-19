@@ -1,0 +1,1021 @@
+\PassOptionsToPackage{hyphens}{url}
+\documentclass[sigconf,screen,review,anonymous]{acmart}
+
+\usepackage{xcolor}
+\usepackage{xurl}
+\usepackage{microtype}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{makecell}
+\usepackage{ragged2e}
+
+\makeatletter
+\AtBeginDocument{%
+  \providecommand\BibTeX{{%
+    Bib\TeX}}%
+  \@ifundefined{linenumberfont}{}{%
+    \renewcommand\linenumberfont{\normalfont\tiny\sffamily\color[gray]{0.55}}}}
+\makeatother
+
+\newcolumntype{L}[1]{>{\RaggedRight\arraybackslash}p{#1}}
+\newcolumntype{C}[1]{>{\Centering\arraybackslash}p{#1}}
+\newcolumntype{Y}{>{\RaggedRight\arraybackslash}X}
+\renewcommand\theadfont{\small\bfseries}
+\setcellgapes{2pt}
+\makegapedcells
+
+\setcopyright{none}
+\settopmatter{printfolios=true}
+\renewcommand\footnotetextcopyrightpermission[1]{}
+
+\acmConference[MM '26]{Proceedings of the 34th ACM International Conference on Multimedia}{November 10--14, 2026}{Rio de Janeiro, Brazil}
+\acmBooktitle{Proceedings of the 34th ACM International Conference on Multimedia (MM '26), November 10--14, 2026, Rio de Janeiro, Brazil}
+\acmDOI{}
+\acmISBN{}
+
+\title{RIIC-ReID: Retrieval-Informed Illumination Correction for Cross-Light Re-Identification}
+
+\author{Anonymous Author(s)}
+\affiliation{%
+  \institution{Anonymous Institution}
+  \city{Anonymous City}
+  \country{Anonymous Country}}
+
+\begin{abstract}
+Most illumination correction methods optimize images for human observers.
+They improve contrast, brightness, and visual naturalness in image space.
+Retrieval systems, however, are judged by a different observer: the
+downstream model.
+This creates a structural mismatch between human-perceptual enhancement and
+model-centric adaptation.
+We study this mismatch as a general problem in re-identification and
+ground it in wildlife re-identification, where cross-camera illumination
+shift is especially severe and identity often depends on local texture cues.
+We therefore formulate illumination handling not as standalone enhancement,
+but as constrained, retrieval-driven adaptation.
+Weak photometric priors define a feasible correction set, while retrieval
+geometry selects the preferred correction inside that set.
+We instantiate this view as RIIC-ReID, a retrieval-informed illumination
+correction framework that couples a compact illumination operator to the re-identification
+backbone through three principles: feasible correction, trust-controlled
+adaptation, and geometry-guided supervision.
+The framework keeps raw, safe base-corrected, and refined branches, and uses
+learnable trust gates to select among them per local region.
+On ATRW under a matched protocol, RIIC-ReID raises mmAP from a baseline of
+$56.69$ to $58.11$ and remains stronger than an illumination-only front-end.
+Standardized fixed query-gallery experiments on GZGC Zebra and StripeSpotter
+show the same direction, while generic perceptual enhancers such as
+Zero-DCE++ and RetinexNet remain weaker or less consistent.
+These results support a simple conclusion: for retrieval, illumination
+correction should be optimized for the model rather than for human perception
+alone.
+\end{abstract}
+
+\begin{CCSXML}
+<ccs2012>
+ <concept>
+  <concept_id>10010147.10010257.10010293</concept_id>
+  <concept_desc>Computing methodologies~Image representations</concept_desc>
+  <concept_significance>500</concept_significance>
+ </concept>
+ <concept>
+  <concept_id>10010147.10010257.10010282.10010284</concept_id>
+  <concept_desc>Computing methodologies~Image processing</concept_desc>
+  <concept_significance>300</concept_significance>
+ </concept>
+ <concept>
+  <concept_id>10002951.10003317.10003347.10003350</concept_id>
+  <concept_desc>Information systems~Retrieval models and ranking</concept_desc>
+  <concept_significance>500</concept_significance>
+ </concept>
+</ccs2012>
+\end{CCSXML}
+
+\ccsdesc[500]{Computing methodologies~Image representations}
+\ccsdesc[300]{Computing methodologies~Image processing}
+\ccsdesc[500]{Information systems~Retrieval models and ranking}
+
+\keywords{illumination correction, re-identification, retrieval, embedding geometry, task-aligned front-end}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction}
+
+Most illumination correction methods are built for human observers.
+They improve contrast, brightness, and visual naturalness in image
+space~\cite{land1971lightness,land1977retinex,wei2018retinexnet,guo2020zerodce,jiang2021enlightengan,wu2022uretinex,ma2022sci,xu2022snraware,cai2023retinexformer,fu2023pairlie,xu2023structureguidance,yi2023diffretinex,yang2023nerco,liu2023msrq,wang2024quadprior,shi2024zeroig,saini2024specularity}.
+That objective is sensible when the final consumer is a person, but in
+retrieval systems the final observer is not the human eye: it is the
+downstream model.
+This raises a more fundamental question than low-light enhancement itself:
+\emph{should illumination correction still be defined by human perception, or
+should it adapt to the feature space preferred by the model?}
+
+This question is general across re-identification, but it becomes especially
+visible in wildlife settings, where capture conditions are less controlled and
+identity often depends on fine-grained local texture and species-specific
+pattern cues~\cite{schneider2019past,schneider2022similarity,cermak2024wildlifedatasets,hou2025openanimals}.
+In such cases, even strong modern encoders must absorb large camera- and
+illumination-induced appearance shifts~\cite{luo2019bag,zhou2019osnet,he2021transreid,zhou2021osnetain,fu2022pnl,dou2023isr,chen2023solider,zhu2024seas,ni2023partaware,he2024instructreid}.
+Two images of the same individual captured under different cameras or lighting
+conditions can differ more in brightness, local shadow, highlight pattern, and
+color cast than two images of different individuals captured under similar
+lighting.
+Once this happens, illumination handling is no longer a cosmetic preprocessing
+detail; it directly reshapes the feature geometry on which retrieval succeeds
+or fails.
+An image that looks more natural to a person need not be the image that best
+preserves identity-discriminative structure for a model
+(Figure~\ref{fig:retrieval-comparison}).
+
+This paper studies that mismatch explicitly.
+Our motivation is broad, but the empirical focus of this paper is
+cross-light re-identification.
+We do not propose a new physical theory of illumination; rather,
+we argue that illumination correction should be \emph{observer-dependent}:
+human-centered enhancement and model-centered adaptation are related but
+different optimization problems.
+Retinex-style structure~\cite{land1971lightness,land1977retinex} remains useful,
+but only as a weak admissibility prior~\cite{wei2018retinexnet,wu2022uretinex,xu2022snraware,cai2023retinexformer,yi2023diffretinex,wang2024quadprior}.
+Once this distinction is made explicit, illumination handling should no longer
+be treated as an isolated enhancement block placed before recognition.
+It should instead be treated as a constrained and learnable front-end of the
+retrieval system itself~\cite{lengyel2021physicsprior,liu2022imageadaptive,hashmi2023featenhancer,wu2023semanticaware,luo2023simminmax,du2024daynight,wang2024motdark}.
+In this view, photometric plausibility defines what
+corrections are admissible, and retrieval behavior determines which admissible
+correction is actually preferred.
+We validate this view primarily in wildlife re-identification, where
+illumination variation is a first-order nuisance and local texture makes
+correction errors especially costly; we use that setting as a stress-test
+domain rather than as a claim of universal retrieval coverage.
+
+The challenge is that a purely task-driven corrector is ill-posed.
+This tension is already visible in ReID settings that either push
+illumination robustness into the descriptor~\cite{huang2019illumination,xu2020blackreid,yang2020contour,xiang2022rethinking,li2024dnvehicle}
+or introduce dedicated nighttime enhancement pipelines~\cite{lu2024illuminationdistillation,lu2025nighttime}.
+If trained only through retrieval loss, the corrector may discover non-physical or
+dataset-specific transformations that reduce training error while harming
+generalization.
+If constrained too strongly by perceptual priors, it may never move samples
+toward the feature structure actually preferred by the encoder.
+The problem is therefore not simply to learn a stronger correction function,
+but to balance \emph{task alignment}, \emph{feasibility}, and \emph{trust}.
+Viewed this way, the value of the method is not a new photometric law; it is
+an initial but concrete step toward model-adaptive illumination correction, in
+which the front-end is trained for the downstream model rather than for human
+perception alone.
+
+We address this problem with RIIC-ReID, a retrieval-informed illumination correction framework
+learned jointly with the downstream encoder.
+The framework is organized around three principles derived from the task formulation:
+\emph{feasible correction}, which bounds the correction inside a safe
+photometric set;
+\emph{trust-controlled adaptation}, which permits correction only where
+image-space and feature-space evidence justify it;
+and \emph{geometry-guided supervision}, which lets retrieval structure rather
+than perceptual preference determine the final correction direction.
+
+\noindent\textbf{Contributions.}
+\textbf{(1)} We introduce a general model-centric view of illumination
+correction for retrieval, where correction should follow the downstream
+model's discriminative geometry and photometric priors act only as
+feasibility constraints.
+\textbf{(2)} We instantiate this view in RIIC-ReID, a constrained retrieval
+front-end that combines bounded inverse illumination, model-aware residual
+adaptation, identity protection, stripe-wise rollback, multi-branch fusion,
+and teacher-guided geometry. We study it primarily in wildlife
+re-identification, where illumination variation and texture-dependent identity
+cues are tightly coupled, making correction errors especially costly and the
+setting a natural stress test for feasibility and trust mechanisms.
+\textbf{(3)} We provide matched empirical evidence in that setting: on ATRW,
+naive illumination drops mmAP from the baseline's $56.69$ to $55.62$, while full RIIC-ReID
+reaches $58.11$; the same ordering remains visible across backbones,
+standardized fixed query-gallery tests on GZGC Zebra and StripeSpotter, and
+perceptual baselines such as Zero-DCE++ and RetinexNet.
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=0.985\textwidth]{figures_generated/fig1_retrieval.pdf}
+  \caption{Retrieval comparison on a representative ATRW query (ID~231,
+  luminance 0.57).
+  \textbf{(a)}~Top-5 gallery results under four illumination-handling
+  strategies.  Green borders denote correct matches; red borders denote wrong
+  identities.  RetinexNet and Zero-DCE++ visually improve the query but
+  introduce confuser retrievals (ID~232), while RIIC-ReID returns all correct
+  matches.
+  \textbf{(b)}~Correction comparison: the four query variants differ subtly
+  in image space, yet produce markedly different retrieval outcomes.
+  \textbf{(c)}~Average cosine similarity between the query embedding and
+  same-identity vs.\ confuser gallery embeddings.  Perceptual methods invert
+  the margin (query becomes closer to the confuser), whereas RIIC-ReID
+  achieves the largest positive margin ($\Delta{=}+0.019$).}
+  \Description{A three-part qualitative figure comparing one ATRW tiger query
+  under raw input, RetinexNet, Zero-DCE++, and RIIC-ReID. The left panel shows
+  top-5 retrieval lists with correct matches highlighted in green and confusers
+  in red. The middle panel shows the four query appearances after different
+  illumination treatments. The right panel plots cosine similarity to the same
+  identity and to a confuser, showing that RIIC-ReID preserves a positive
+  retrieval margin while perceptual enhancement can invert it.}
+  \label{fig:retrieval-comparison}
+\end{figure*}
+
+\section{Related Work}
+
+\subsection{Photometric and Retinex-Style Correction}
+
+Classical Retinex theory~\cite{land1971lightness,land1977retinex} models an image as the
+product of reflectance and illumination, then recovers a reflectance-like
+representation by dividing out the estimated illumination.
+Deep Retinex methods, curve-estimation models, and recent unfolding, SNR-aware,
+structure-guided, transformer, diffusion, and implicit-representation variants
+learn this decomposition or related image-formation constraints end-to-end~\cite{wei2018retinexnet,guo2020zerodce,jiang2021enlightengan,wu2022uretinex,ma2022sci,xu2022snraware,fu2023pairlie,xu2023structureguidance,cai2023retinexformer,yi2023diffretinex,yang2023nerco,liu2023msrq,wang2024quadprior,shi2024zeroig,saini2024specularity}.
+These methods can substantially improve visual quality, but their target remains
+photometric plausibility rather than retrieval utility.
+
+\subsection{Task-Aware Front-Ends for Recognition}
+
+Another line of work evaluates front-end processing through downstream utility
+rather than perceptual fidelity alone.
+In adverse-weather, day-night, and low-light recognition, task-conditioned
+front-ends adapt image processing to detection or tracking heads and improve
+downstream performance~\cite{lengyel2021physicsprior,liu2022imageadaptive,hashmi2023featenhancer,wu2023semanticaware,luo2023simminmax,du2024daynight,wang2024motdark}.
+Related work also studies day-night transfer for retrieval itself~\cite{li2024dnvehicle}.
+Our work belongs to this task-aware family, but differs in making the mismatch
+between perceptual and retrieval optima explicit and using it to design both
+the front-end and its supervision.
+
+\subsection{Re-Identification Under Illumination Shift}
+
+Re-identification methods often absorb illumination variation indirectly
+through augmentation, stronger evaluation protocols, large-scale pre-training,
+and modern CNN/Transformer backbones~\cite{zheng2015market,ristani2016performance,luo2019bag,zhou2019osnet,he2021transreid,zhou2021osnetain,fu2022pnl,dou2023isr,chen2023solider,zhu2024seas,ni2023partaware,he2024instructreid}.
+Several works address illumination more explicitly.
+Illumination-invariant ReID and Black Re-ID~\cite{huang2019illumination,xu2020blackreid}
+design representations intended to be more stable under difficult lighting,
+while later work studies domain generalization, relevance-aware experts,
+person-scale meta-generalization, exemplar-memory adaptation, clothing change,
+visible-infrared transfer, and explicit nighttime matching~\cite{zhao2021m3l,dai2021ramoe,bai2021person30k,zhong2019invariance,yang2020contour,ye2020ddag,wei2020coal,yang2022adca,xiang2022rethinking,jiang2025privacyvir,lu2024illuminationdistillation,lu2025nighttime}.
+Wildlife and animal re-identification has likewise expanded from tiger-specific
+pipelines to broader surveys, ecological analyses, toolkits, and multi-species
+resources~\cite{freytag2016chimpanzee,liu2019pgcfl,liu2019ppgnet,li2020atrw,schneider2019past,schneider2022similarity,cermak2024wildlifedatasets,adam2024seaturtleid,nepovinnykh2024species,wahltinez2024opensource,moosa2024selfsupervised,hou2025openanimals,adam2025wildlifereid10k}.
+Our view is complementary: instead of pursuing illumination robustness only in
+the descriptor or the dataset, we learn a bounded front-end whose correction is
+selected by downstream retrieval behavior.
+In this paper, we study that idea through a retrieval-centered formulation and
+use wildlife benchmarks as a stress-test domain where illumination errors are
+especially exposed.
+
+\section{Why Perceptual Illumination Correction Is Not Retrieval-Optimal}
+
+\subsection{Task-Oriented Formulation}
+
+Let $x \in [0,1]^{3 \times H \times W}$ denote an RGB image, $y$ its identity
+label, $g_{\phi}$ a learnable illumination front-end, and $f_{\theta}$ the
+downstream retrieval encoder.
+We denote by
+\begin{equation}
+  \tilde{x} = g_{\phi}(x), \qquad z = f_{\theta}(\tilde{x})
+\end{equation}
+the corrected image and its embedding, respectively.
+
+For retrieval-oriented illumination handling, we solve
+\begin{equation}
+  \min_{\phi,\theta}
+  \mathbb{E}_{(x,y)} \left[ \mathcal{L}_{\text{task}}(f_{\theta}(g_{\phi}(x)), y) \right]
+  \quad
+  \text{s.t.}
+  \quad
+  g_{\phi}(x) \in \mathcal{F}(x),
+  \label{eq:main-problem}
+\end{equation}
+where $\mathcal{F}(x)$ is a feasible set that enforces bounded gain, bounded
+chromatic drift, and identity-preserving deviations from the original image.
+
+Equation~\eqref{eq:main-problem} differs from conventional enhancement
+objectives~\cite{wei2018retinexnet,guo2020zerodce,jiang2021enlightengan,cai2023retinexformer,yi2023diffretinex},
+in that visual plausibility is enforced only through the feasible set
+$\mathcal{F}(x)$; the optimization objective itself is entirely
+retrieval-driven.
+
+\subsection{Why the Two Optima Generally Differ}
+
+To make the mismatch explicit, define the retrieval objective
+$L_x(\tilde{x}) = \mathcal{L}_{\text{task}}(f_{\theta}(\tilde{x}), y)$
+and a photometric objective $P_x(\tilde{x})$ specified without reference to
+downstream retrieval geometry.
+Within the same feasible set $\mathcal{F}(x)$, consider three solutions:
+\[
+\begin{aligned}
+  \tilde{x}_P^{\star}
+  &=
+  \arg\min_{\tilde{x} \in \mathcal{F}(x)} P_x(\tilde{x}), \\
+  \tilde{x}_T^{\star}
+  &=
+  \arg\min_{\tilde{x} \in \mathcal{F}(x)} L_x(\tilde{x}), \\
+  \tilde{x}_{\lambda}^{\star}
+  &=
+  \arg\min_{\tilde{x} \in \mathcal{F}(x)}
+  \bigl(L_x(\tilde{x}) + \lambda P_x(\tilde{x})\bigr).
+\end{aligned}
+\]
+The first is the photometric optimum, the second the retrieval optimum, and
+the third the weak-prior solution used in our formulation.
+
+The non-identifiability of Retinex-style decomposition already implies that
+some prior is unavoidable~\cite{land1971lightness,wei2018retinexnet,cai2023retinexformer}:
+for any positive field $c$, one may write
+$x = (R \odot c) \odot (L / c)$.
+The relevant question is therefore not whether a prior exists, but whether it
+should dominate the objective or merely regularize the feasible set.
+
+\paragraph{Prop. 1 (Local mismatch).}
+Assume $\mathcal{F}(x)$ is an embedded $C^1$ feasible submanifold in a neighborhood of a
+photometric optimum $\tilde{x}_P^{\star}$, and $L_x,P_x$ are differentiable on
+that neighborhood.
+Let
+\[
+  \mathcal{T}_P = T_{\mathcal{F}(x)}(\tilde{x}_P^{\star}),
+  \qquad
+  g_P = \Pi_{\mathcal{T}_P}\nabla L_x(\tilde{x}_P^{\star}).
+\]
+If $g_P \neq 0$, then $\tilde{x}_P^{\star}$ is not a local minimizer of
+$L_x$ over $\mathcal{F}(x)$ and therefore cannot coincide with
+$\tilde{x}_T^{\star}$.
+
+\paragraph{Proof sketch (full proof in supplementary material).}
+Since $g_P \in \mathcal{T}_P$, there exists a feasible $C^1$ curve
+$\gamma(t) \subset \mathcal{F}(x)$ with $\gamma(0)=\tilde{x}_P^{\star}$ and
+$\gamma'(0)=-g_P$, so
+\[
+  \frac{d}{dt}L_x(\gamma(t))\Big|_{t=0}
+  =
+  \langle \nabla L_x(\tilde{x}_P^{\star}), -g_P \rangle
+  =
+  -\|g_P\|_2^2 < 0.
+\]
+Hence $L_x$ strictly decreases along a feasible direction through
+$\tilde{x}_P^{\star}$, so the photometric optimum cannot be retrieval-optimal on
+$\mathcal{F}(x)$ unless the projected retrieval gradient vanishes.
+
+Proposition~1 formalizes the key point of the paper.
+A perceptually reasonable correction is not retrieval-optimal unless the
+photometric optimum is also stationary for retrieval on the same feasible
+manifold.
+Such alignment is possible, but it is not guaranteed by Retinex-style
+admissibility alone. Conversely, the vanishing of the projected retrieval
+gradient is only a necessary local condition, not a sufficient one for the two
+optima to coincide.
+
+\subsection{A Local Justification for Weak Priors}
+
+We now justify why the photometric term should be weak.
+Introduce local coordinates $\delta$ on $\mathcal{F}(x)$ around a retrieval
+optimum $\tilde{x}_T^{\star}$, so $\delta=0$ corresponds to
+$\tilde{x}_T^{\star}$.
+Assume $L_x(\delta)$ and $P_x(\delta)$ are twice continuously differentiable
+and that the restricted Hessian
+$H = \nabla^2 L_x(0)$ is positive definite on the feasible tangent space.
+Consider the weak-prior objective
+\[
+  J_{\lambda}(\delta) = L_x(\delta) + \lambda P_x(\delta),
+  \qquad
+  \lambda \ge 0.
+\]
+
+\paragraph{Prop. 2 (Weak-prior perturbation).}
+Under the assumptions above, for sufficiently small $\lambda$ there exists a
+local minimizer $\delta_{\lambda}^{\star}$ of $J_{\lambda}$ satisfying
+\[
+  \delta_{\lambda}^{\star}
+  =
+  -\lambda H^{-1}\nabla P_x(0) + o(\lambda).
+\]
+Consequently,
+\[
+  \|\delta_{\lambda}^{\star}\|_2 = O(\lambda),
+  \qquad
+  L_x(\delta_{\lambda}^{\star}) - L_x(0) = O(\lambda^2).
+\]
+
+\paragraph{Proof sketch (full proof in supplementary material).}
+The stationarity condition is
+\[
+  \nabla L_x(\delta_{\lambda}^{\star})
+  +
+  \lambda \nabla P_x(\delta_{\lambda}^{\star}) = 0.
+\]
+Because $\delta=0$ is a retrieval optimum, $\nabla L_x(0)=0$.
+Since $H$ is invertible, the implicit function theorem gives a $C^1$ local
+solution branch and therefore
+\[
+  \delta_{\lambda}^{\star}
+  =
+  -\lambda H^{-1}\nabla P_x(0) + o(\lambda).
+\]
+In particular, $\|\delta_{\lambda}^{\star}\|_2 = O(\lambda)$.
+Substituting this into the second-order expansion of $L_x$ around $0$,
+\[
+  L_x(\delta)
+  =
+  L_x(0) + \frac{1}{2}\delta^{\top}H\delta + o(\|\delta\|_2^2),
+\]
+yields the claimed $O(\lambda^2)$ excess retrieval risk.
+
+Proposition~2 shows that a weak photometric prior perturbs the retrieval
+solution only to first order, while the induced retrieval risk increases only
+to second order.
+(The effective range of this regime depends on the condition number of~$H$:
+an ill-conditioned Hessian amplifies $\|\delta_{\lambda}^{\star}\|_2$ for a
+given~$\lambda$, which motivates the conservative annealing schedule used in
+practice.)
+This is exactly the regime we want: photometric structure regularizes the local
+search space without dictating the correction target.
+
+\subsection{Design Implications}
+
+A final property completes the analysis: once model-aware adaptation moves
+beyond bounded photometric correction, the resulting change must remain
+trust-bounded.
+
+\paragraph{Prop. 3 (Trust-bounded adaptation).}
+Suppose the corrected image is produced by
+\[
+  \tilde{x}
+  =
+  \alpha \odot \tilde{x}_{\mathrm{prot}} + (1-\alpha)\odot x,
+  \qquad
+  0 \le \alpha \le 1,
+\]
+and a stripe feature is fused by
+\[
+  F_{\mathrm{fuse}}^{(s)} = \sum_{b=1}^{B}\alpha_b^{(s)}F_b^{(s)},
+  \qquad
+  \alpha_b^{(s)} \ge 0,\quad \sum_{b=1}^{B}\alpha_b^{(s)}=1.
+\]
+Then, for any monotone norm,
+\[
+  \|\tilde{x}-x\|
+  \le
+  \|\tilde{x}_{\mathrm{prot}}-x\|,
+\]
+and, for each stripe $s$ and any norm,
+\[
+  \|F_{\mathrm{fuse}}^{(s)} - F_{\mathrm{raw}}^{(s)}\|
+  \le
+  \sum_{b \neq \mathrm{raw}}
+  \alpha_b^{(s)}
+  \|F_b^{(s)} - F_{\mathrm{raw}}^{(s)}\|.
+\]
+
+\paragraph{Proof sketch (full proof in supplementary material).}
+The image-space bound follows because
+$\tilde{x}-x=\alpha\odot(\tilde{x}_{\mathrm{prot}}-x)$ with
+$0 \le \alpha \le 1$ elementwise.
+The feature-space bound follows because softmax fusion makes each fused stripe a
+convex combination of branch features, so
+\[
+  F_{\mathrm{fuse}}^{(s)} - F_{\mathrm{raw}}^{(s)}
+  =
+  \sum_{b \neq \mathrm{raw}}
+  \alpha_b^{(s)}\bigl(F_b^{(s)} - F_{\mathrm{raw}}^{(s)}\bigr),
+\]
+ after which the triangle inequality gives the claim.
+
+Proposition~3 explains why rollback and branch fusion are not heuristic extras:
+they implement explicit image-space and feature-space trust bounds.
+
+The three propositions now yield a direct algorithmic reading.
+Proposition~1 says that photometric admissibility alone cannot determine the
+retrieval-preferred correction.
+Proposition~2 says that the photometric term should regularize the search only
+weakly.
+Proposition~3 says that the correction must remain trust-bounded in both image
+space and feature space.
+These observations lead to three requirements for a retrieval-oriented
+illumination front-end.
+First, correction must remain \emph{feasible}: the model needs bounded gain,
+bounded chromatic drift, and weak physical regularity so the learned operator
+does not collapse into arbitrary image manipulation.
+Second, correction must be \emph{trust-controlled}: the exact projection onto
+$\mathcal{F}(x)$ is intractable once semantic constraints are introduced, so
+the system needs learnable image-space and feature-space damping mechanisms.
+Third, correction must be \emph{geometry-guided}: once the feasible set is
+defined, the preferred correction should be selected by retrieval geometry
+rather than by perceptual preference.
+RIIC-ReID is a direct implementation of these three requirements.
+
+\section{RIIC-ReID}
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=0.78\textwidth]{figures_generated/figure2_2.jpg}
+  \caption{RIIC-ReID architecture.  A bounded base corrector defines feasible
+  illumination correction (\S\ref{sec:feasible}).  A model-aware residual
+  branch adapts correction using mid-level encoder features, while identity
+  protection and stripe-wise rollback suppress risky edits
+  (\S\ref{sec:trust}).  Stripe-aware competitive fusion selects among raw,
+  base-corrected, and refined branches.  Teacher-guided geometry losses
+  supervise the corrected features to remain within same-identity manifold
+  tubes (\S\ref{sec:geometry}).}
+  \Description{A schematic of the RIIC-ReID pipeline. The top branch estimates
+  luminance and feasible base correction. A middle branch performs
+  trust-controlled residual adaptation using mid-level features, identity
+  protection, and stripe-wise rollback. The right side fuses raw,
+  base-corrected, and refined branches with stripe-aware attention before the
+  final descriptor head. The lower panel summarizes the loss terms used for
+  retrieval, photometric feasibility, and teacher-guided geometry.}
+  \label{fig:architecture}
+\end{figure*}
+
+\subsection{Overview}
+\label{sec:overview}
+
+Figure~\ref{fig:architecture} gives an overview.
+The RIIC-ReID framework couples a compact illumination operator to the retrieval encoder without
+turning the system into a free-form enhancer.
+The illumination branch first constructs a feasible base correction, then
+applies model-aware adaptation and lightweight refinement under explicit trust
+control.
+The encoder simultaneously keeps a raw branch, so the final descriptor can be
+selected from raw, bounded base-corrected, and refined evidence rather than
+being forced to trust one corrected image.
+This organization mirrors the theory above and stays close to the broader
+idea of task-aware front-ends for recognition~\cite{liu2022imageadaptive,hashmi2023featenhancer,wu2023semanticaware}:
+photometric priors delimit the
+admissible set, trust mechanisms keep adaptation conservative, and retrieval
+geometry determines which admissible correction is actually worth using.
+
+\subsection{Feasible Illumination Correction}
+\label{sec:feasible}
+
+We adopt the standard reflectance--illumination factorization as an approximate
+inductive bias~\cite{land1971lightness,land1977retinex,wei2018retinexnet,cai2023retinexformer},
+\begin{equation}
+  x \approx R \odot L,
+\end{equation}
+where $R$ is a reflectance-like term and $L$ is an illumination field.
+The factorization is not treated as an exact physical claim; it simply provides
+structure for a learnable front-end.
+
+The framework first computes a luminance map
+\begin{equation}
+  Y = 0.299 x_R + 0.587 x_G + 0.114 x_B,
+\end{equation}
+then predicts a coarse illumination field $L_0 = E_{\phi}(Y)$.
+To allow spatially varying task sensitivity, it also predicts a multiplicative
+sensitivity map $S_{\phi}(x)$ and forms
+\begin{equation}
+  L_c = 1 + (L_0 - 1) \odot S_{\phi}(x).
+\end{equation}
+This yields a stable low-frequency estimate without forcing the same correction
+strength everywhere.
+
+To handle color shift, the front-end can further augment the scalar illumination with a
+learned white-balance gain or a learned multi-channel illumination field.
+We denote the resulting effective correction field by $\hat{L}$.
+Direct inverse illumination correction is unstable in dark or saturated regions,
+so the framework applies a bounded scaling rule.
+We compute the desired inverse scale
+$a = 1/(\hat{L} + \varepsilon)$
+and the per-pixel saturation-safe upper bound
+$b = 0.99/(x + \varepsilon)$.
+The actual scale is obtained through a differentiable soft minimum
+$s = \operatorname{softmin}(a,b)$,
+then clamped to a bounded gain range together with a bound on chromatic drift
+$\|\Delta_{\text{chroma}}\|_{\infty} \le \tau_c$.
+The resulting base-corrected image is
+$\tilde{x}_{\text{base}} = x \odot s$.
+This stage implements the feasible-set part of the theory: it gives the model a
+learnable but explicitly bounded correction space.
+These constraints are not the final target; they only ensure that subsequent
+task-driven adaptation starts from a safe operating region.
+
+\subsection{Trust-Controlled Adaptation}
+\label{sec:trust}
+
+Feasible correction alone is not enough, because even an admissible correction
+need not be trustworthy everywhere.
+The framework therefore introduces two layers of trust control.
+
+First, a safe coarse guidance image is fed into the early layers of the
+backbone to extract a mid-level feature map $F_{\text{mid}}$.
+This feature map conditions a model-aware residual branch:
+\begin{equation}
+  \tilde{x}_{\text{att}}
+  =
+  M_{\phi}(x, \tilde{x}_{\text{base}}, \hat{L}, F_{\text{mid}}).
+\end{equation}
+The correction therefore responds to the encoder's internal representation
+rather than to image statistics alone.
+This follows prior task-aware enhancement pipelines that use downstream
+semantics to guide low-level processing~\cite{liu2022imageadaptive,hashmi2023featenhancer,wu2023semanticaware},
+but here the signal is explicitly retrieval-driven.
+
+Second, the model restricts where and how strongly this residual may act.
+An identity protection map
+$P_{\text{id}} \in [0,1]^{1 \times H \times W}$ is constructed from early
+backbone activations and used to suppress changes in identity-critical regions:
+\begin{equation}
+  \tilde{x}_{\text{prot}}
+  =
+  x + (1 - P_{\text{id}}) \odot (\tilde{x}_{\text{att}} - x).
+\end{equation}
+It then predicts a stripe-wise rollback gate $\alpha$, conditioned on
+illumination, color risk, correction magnitude, and $F_{\text{mid}}$, so each
+horizontal body region can independently return toward the raw observation:
+\begin{equation}
+  \tilde{x}
+  =
+  \alpha \odot \tilde{x}_{\text{prot}} + (1-\alpha) \odot x.
+\end{equation}
+This image-space rollback acts as a learned trust-region mechanism: risky
+regions receive smaller effective correction steps.
+A lightweight refiner then sharpens local detail around the rollback solution,
+and the identity protection mask is applied again so refinement cannot
+overwrite protected regions.
+
+Trust control continues in feature space.
+The framework preserves a raw branch in the encoder and fuses raw, base-corrected, and
+refined branches using stripe-aware competitive attention.
+In the simplified two-branch form,
+\begin{equation}
+  F_{\text{fuse}}
+  =
+  F_{\text{raw}} + w \odot (F_{\text{corr}} - F_{\text{raw}}).
+  \label{eq:feature-fusion}
+\end{equation}
+The full framework generalizes this to three branches
+$b \in \{1,2,3\}$ (raw, base-corrected, refined), where per-stripe fusion
+weights are learned:
+\begin{equation}
+  F_{\text{fuse}}^{(s)}
+  =
+  \sum_{b=1}^{3} \alpha_b^{(s)} F_b^{(s)},
+  \quad
+  \alpha^{(s)}
+  =
+  \operatorname{softmax}\!\bigl(\operatorname{MLP}([\bar{F}_1^{(s)};\ldots;\bar{F}_3^{(s)}])/\tau\bigr),
+\end{equation}
+where $\bar{F}_b^{(s)}$ is the average-pooled descriptor of branch $b$ at
+stripe $s$.
+Equation~\eqref{eq:feature-fusion} is the special case $B{=}2$ with
+$w{=}\alpha_{\text{corr}}^{(s)}$; in either form, the raw branch anchors the
+representation so that correction acts as a bounded residual.
+The gate also receives compact front-end statistics such as illumination
+strength, color risk, rollback strength, and correction magnitude, so trust in
+the corrected branch remains explicitly bounded by the state of the
+illumination module.
+This feature-space gate is the second trust mechanism: even if the image branch
+is corrected aggressively, the representation need not trust it
+unconditionally.
+
+\subsection{Geometry-Guided Training}
+\label{sec:geometry}
+
+The framework is trained with three groups of objectives.
+The first is the standard retrieval loss
+$\mathcal{L}_{\text{reid}} = \mathcal{L}_{\text{cls}} +
+\mathcal{L}_{\text{metric}}$,
+instantiated with cross-entropy, triplet~\cite{hermans2017triplet},
+ArcFace~\cite{deng2019arcface}, and center-loss terms~\cite{wen2016discriminative};
+related metric-learning formulations such as FaceNet and Circle Loss provide
+closely related geometric viewpoints~\cite{schroff2015facenet,sun2020circle}.
+The second is a weak photometric feasibility term
+$\mathcal{L}_{\text{photo}}$, which keeps the correction inside the bounded
+set described above, together with an illumination-consistency term on
+synthetic photometric variants,
+$\mathcal{L}_{\text{iicl}} = V^{-1}\sum_{v}(1 - \cos(z, z^{(v)}))$.
+
+The third group provides the key retrieval-oriented supervision beyond
+standard descriptor-level ReID objectives~\cite{hermans2017triplet,deng2019arcface,dou2023isr,zhu2024seas}.
+The training code exposes warmup, optional illumination-only, and joint
+phases; the precise ATRW schedule is given in Section~\ref{sec:setup}.
+After warmup, we freeze a snapshot of the raw-reference encoder as a teacher
+and use it to supervise the geometry of corrected features.
+A teacher-manifold tube loss constrains corrected features to remain inside a
+same-identity neighborhood:
+\begin{equation}
+  \mathcal{L}_{\text{tube}}
+  =
+  [\|d^{\parallel}\| - r]_{+}^{2}
+  +
+  \lambda_{\perp}\|d^{\perp}\|_{2}^{2},
+\end{equation}
+where $d^{\parallel}$ and $d^{\perp}$ are projections onto the teacher
+subspace and its complement.
+We further use a teacher-manifold separation term
+$\mathcal{L}_{\text{sep}}$ to maintain class boundaries and a differentiable
+cross-light SoftAP objective $\mathcal{L}_{\text{softap}}$ to preserve
+listwise retrieval ordering under illumination change.
+To reduce mini-batch bias, the teacher gallery can be augmented with a queue of
+frozen teacher descriptors from recent batches.
+In the final ATRW mainline, other active auxiliaries are kept weak and
+implementation-oriented: masked identity-image preservation and nuisance
+decorrelation.
+Together these terms specify not only whether correction helps, but which local
+retrieval geometry the corrected feature should preserve.
+
+The full objective is
+\begin{equation}
+  \mathcal{L}_{\text{total}}
+  =
+  \lambda_{\text{reid}}\mathcal{L}_{\text{reid}}
+  +
+  \lambda_{\text{photo}}\mathcal{L}_{\text{photo}}
+  +
+  \lambda_{\text{iicl}}\mathcal{L}_{\text{iicl}}
+  +
+  \lambda_{\text{geo}}\mathcal{L}_{\text{geo}}
+  +
+  \lambda_{\text{aux}}\mathcal{L}_{\text{aux}},
+  \label{eq:total-loss}
+\end{equation}
+where
+$\mathcal{L}_{\text{geo}} =
+\mathcal{L}_{\text{tube}} + \mathcal{L}_{\text{sep}} + \mathcal{L}_{\text{softap}}$
+and $\mathcal{L}_{\text{aux}}$ bundles the weak nuisance-decorrelation and
+masked identity-image preservation terms.
+During joint training, $\lambda_{\text{photo}}$ is annealed from a moderate
+initial value to a small residual.
+This schedule matches the theoretical view: photometric priors stabilize the
+early search, then progressively yield to retrieval geometry.
+
+\section{Experiments}
+
+\subsection{Experimental Setup}
+\label{sec:setup}
+
+We evaluate primarily on ATRW~\cite{li2020atrw}, an open-set wildlife
+re-identification benchmark, and report single-camera mAP, cross-camera mAP,
+and their mean (mmAP) as the main selection metric.
+We choose ATRW as the main testbed because it exposes the target problem most
+clearly: severe cross-camera illumination variation coupled with
+texture-dependent identity cues.
+The experiments test three points: whether generic photometric correction alone
+helps retrieval, whether trust-controlled adaptation recovers gains over that
+generic correction, and whether the same ordering remains visible across
+backbones, datasets, and human-oriented enhancement baselines.
+
+\paragraph{Baseline.}
+Unless otherwise stated, the main ablation uses
+OSNet-AIN~\cite{zhou2021osnetain}.
+We define a matched ReID baseline (hereafter: \emph{baseline}) as the same backbone, stripe head, input
+resolution ($256{\times}384$), PK sampler ($P{=}8$, $K{=}4$), ReID loss
+suite~\cite{luo2019bag,hermans2017triplet,deng2019arcface}, and total training
+budget as the corresponding RIIC-ReID run, but without the illumination front-end
+or geometric supervision.
+For clarity, the matched main ablation contains four within-budget variants:
+\emph{baseline}; \emph{naive illumination}, which keeps only a safe correction
+branch; \emph{illumination only}, which adds trust-controlled correction but no
+teacher geometry; and \emph{full RIIC-ReID}, which enables all components.
+We additionally construct a generic illumination control that keeps a learned
+safe-correction branch but removes model-aware residual refinement, identity
+protection, stripe-wise rollback, raw/corrected branch fusion, and
+teacher-guided geometry. This isolates whether standalone illumination
+correction already helps retrieval, or only becomes useful after it is coupled
+to internal encoder evidence and retrieval geometry.
+
+\paragraph{Training schedule.}
+The code retains a three-phase training interface, but the final ATRW mainline
+collapses it into a practical two-stage run: a 15-epoch ReID warmup, a
+zero-epoch standalone illumination phase, and 66 joint-training epochs.
+Functionally, this is a warmup-plus-joint schedule with auxiliary weights
+ramped during the early joint stage; the teacher encoder for
+$\mathcal{L}_{\text{geo}}$ is frozen at the end of warmup.
+
+\paragraph{Additional evidence.}
+Beyond ATRW, we use standardized fixed query-gallery splits of GZGC Zebra and
+StripeSpotter as auxiliary cross-species robustness checks, in line with the
+broader move toward more explicit animal-ReID evaluation resources and
+benchmarking protocols~\cite{cermak2024wildlifedatasets,adam2024seaturtleid,hou2025openanimals}.
+These are not presented as official open-set benchmarks; final reported
+numbers come from fixed query/gallery splits, while checkpoint selection uses
+held-out train query/gallery splits.
+Their role is to test whether the same model-centric ordering survives beyond
+the main ATRW stress-test, not to claim a fully standardized universal suite
+for cross-species re-identification.
+We compare the same three variants as above: baseline, generic
+illumination, and full model.
+We also test whether human-oriented enhancement alone can explain the gain by
+preprocessing ATRW and GZGC Zebra with a Zero-DCE++ implementation and
+RetinexNet, then retraining the same OSNet-AIN baseline on the enhanced data.
+
+\subsection{Main Results}
+
+Table~\ref{tab:main-results} presents the primary comparison.
+The pattern directly follows the logic of Propositions~1--3.
+The naive illumination control underperforms the baseline, with
+mmAP dropping from $56.69$ to $55.62$ and cross-camera mAP dropping from
+$40.87$ to $39.60$.
+This rules out the easy explanation that any learnable correction branch is
+sufficient: without trust control, correction can perturb identity-relevant
+structure on the hardest cross-camera metric.
+
+Re-introducing task-aligned coupling reverses that behavior.
+The task-aligned illumination front-end raises mmAP to $57.86$, which is
+$+1.17$ over the baseline and $+2.24$ over the naive control.
+This jump is the main evidence for trust-controlled adaptation: the problem is
+not illumination correction per se, but uncontrolled correction.
+Adding full teacher-guided geometry yields a smaller but still consistent
+further improvement to $58.11$ mmAP, a
+$+1.42$ gain over the baseline and a $+0.25$ gain over the
+illumination-only front-end.
+The improvement is again concentrated on cross-camera mAP
+($41.80$ for RIIC-ReID vs.\ $40.87$ for the baseline and $39.60$ for the
+naive control), which is the metric most exposed to illumination shift.
+
+\begin{table}[t]
+  \caption{ATRW main ablation under a matched protocol.
+  Naive illumination removes model-centric trust and geometry coupling.}
+  \label{tab:main-results}
+  \centering
+  \small
+  \setlength{\tabcolsep}{4pt}
+  \begin{tabularx}{\columnwidth}{@{}Y C{0.15\columnwidth} C{0.15\columnwidth} C{0.12\columnwidth} C{0.18\columnwidth}@{}}
+    \toprule
+    \thead[l]{Variant} & \thead{mAP\\$_{\text{single}}$} & \thead{mAP\\$_{\text{cross}}$} & mmAP & \thead{Rel.\\Baseline} \\
+    \midrule
+    Baseline & 72.52 & 40.87 & 56.69 & 0.00 \\
+    Naive illumination & 71.65 & 39.60 & 55.62 & -1.07 \\
+    Illumination only & 74.30 & 41.43 & 57.86 & +1.17 \\
+    Full RIIC-ReID & \textbf{74.43} & \textbf{41.80} & \textbf{58.11} & \textbf{+1.42} \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\subsection{Cross-Backbone Robustness}
+
+The main table uses OSNet-AIN because it is the primary paper backbone, but
+our claim is not that RIIC-ReID is tied to one encoder family.
+To test this directly, we repeat the same baseline-versus-full-model comparison on
+OSNet-X1.0 and ResNet-50 while keeping the backbone-specific setup fixed within
+each row.
+Table~\ref{tab:backbone-robustness} shows consistent positive gains:
+$+1.42$ mmAP on OSNet-AIN, $+1.44$ on OSNet-X1.0, and $+1.01$ on ResNet-50,
+with corresponding cross-camera mAP gains of $+0.93$, $+1.40$, and $+1.05$.
+The benefit therefore does not come from one backbone's inductive bias alone.
+
+\begin{table}[t]
+  \caption{ATRW cross-backbone robustness under matched within-backbone
+  protocols.}
+  \label{tab:backbone-robustness}
+  \centering
+  \small
+  \setlength{\tabcolsep}{3pt}
+  \resizebox{\columnwidth}{!}{%
+  \begin{tabular}{lcccccc}
+    \toprule
+    Backbone & Base mmAP & Full mmAP & $\Delta$mmAP & Base Cross & Full Cross & $\Delta$Cross \\
+    \midrule
+    OSNet-AIN X1.0 & 56.69 & 58.11 & +1.42 & 40.87 & 41.80 & +0.93 \\
+    OSNet X1.0 & 59.06 & 60.50 & +1.44 & 43.35 & 44.75 & +1.40 \\
+    ResNet-50 & 56.61 & 57.62 & +1.01 & 42.92 & 43.97 & +1.05 \\
+    \bottomrule
+  \end{tabular}%
+  }
+\end{table}
+
+\subsection{Cross-Species Auxiliary Evidence}
+
+We next ask whether the same ordering survives beyond ATRW on fixed
+query-gallery evaluations with different species and capture conditions.
+Table~\ref{tab:cross-species} reports Rank-1 and mAP on GZGC Zebra and
+StripeSpotter.
+On GZGC Zebra, generic illumination already gives a moderate gain
+($72.71$ vs.\ $70.32$), but the full model improves further to $74.22$.
+On StripeSpotter, generic illumination is slightly worse than the
+baseline ($91.29$ vs.\ $91.55$), while the full model still reaches
+$93.89$.
+This asymmetry is informative: generic correction is not uniformly harmful, but
+its effect is unstable, whereas the full task-aligned model remains best on
+both datasets.
+
+\begin{table}[t]
+  \caption{Cross-species fixed query-gallery evidence on standardized splits.
+  Model selection uses held-out train splits.}
+  \label{tab:cross-species}
+  \centering
+  \small
+  \setlength{\tabcolsep}{3pt}
+  \begin{tabularx}{\columnwidth}{@{}L{0.19\columnwidth} Y C{0.12\columnwidth} C{0.12\columnwidth} C{0.16\columnwidth}@{}}
+    \toprule
+    \thead[l]{Dataset} & \thead[l]{Variant} & Rank-1 & mAP & \thead{Rel.\\Baseline} \\
+    \midrule
+    GZGC Zebra & Baseline & 71.70 & 70.32 & 0.00 \\
+    GZGC Zebra & Generic illumination & 74.48 & 72.71 & +2.39 \\
+    GZGC Zebra & Full model & \textbf{75.92} & \textbf{74.22} & \textbf{+3.90} \\
+    \addlinespace[1pt]
+    StripeSpotter & Baseline & 93.00 & 91.55 & 0.00 \\
+    StripeSpotter & Generic illumination & 92.00 & 91.29 & -0.26 \\
+    StripeSpotter & Full model & \textbf{94.00} & \textbf{93.89} & \textbf{+2.34} \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\subsection{Generic Perceptual Enhancement Baselines}
+
+We finally test whether the gain can be explained simply by better-looking
+inputs produced outside the retrieval model.
+Table~\ref{tab:perceptual-baselines} shows that on ATRW, Zero-DCE++ reaches
+$57.75$ mmAP while RetinexNet stays at $56.67$; both remain below the full
+model at $58.11$.
+On GZGC Zebra, Zero-DCE++ and RetinexNet reach $67.31$ and $68.51$ mAP,
+again well below the task-aligned full model at $74.22$.
+Generic enhancement is therefore not useless, but it is weaker and less
+reliable than retrieval-aligned correction.
+
+\begin{table}[t]
+  \caption{Generic human-perceptual enhancement baselines with a task-aligned
+  full-model reference.
+  Dashes denote metrics undefined under the respective protocol:
+  ATRW's open-set evaluation does not define Rank-1 or overall mAP;
+  GZGC~Zebra uses a single-partition gallery without the
+  single-camera/cross-camera distinction.}
+  \label{tab:perceptual-baselines}
+  \centering
+  \footnotesize
+  \setlength{\tabcolsep}{2pt}
+  \begin{tabular}{@{}L{0.17\columnwidth} L{0.16\columnwidth} C{0.075\columnwidth} C{0.075\columnwidth} C{0.11\columnwidth} C{0.11\columnwidth} C{0.095\columnwidth}@{}}
+    \toprule
+    \thead[l]{Dataset} & \thead[l]{Method} & Rank-1 & mAP & \thead{mAP\\$_{\text{single}}$} & \thead{mAP\\$_{\text{cross}}$} & mmAP \\
+    \midrule
+    ATRW & Zero-DCE++ & -- & -- & 73.14 & 42.36 & 57.75 \\
+    ATRW & RetinexNet & -- & -- & 71.70 & 41.64 & 56.67 \\
+    ATRW & Full RIIC-ReID & -- & -- & \textbf{74.43} & \textbf{41.80} & \textbf{58.11} \\
+    \addlinespace[1pt]
+    GZGC Zebra & Zero-DCE++ & 68.01 & 67.31 & -- & -- & -- \\
+    GZGC Zebra & RetinexNet & 68.64 & 68.51 & -- & -- & -- \\
+    GZGC Zebra & Full RIIC-ReID & \textbf{75.92} & \textbf{74.22} & -- & -- & -- \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Interpretation}
+
+Taken together, the results support a reliability claim rather than a universal
+dominance claim. Under a wildlife-focused evaluation suite, the generic-control
+row shows that learnable photometric correction is not automatically
+retrieval-beneficial; on ATRW it hurts the hardest metric. Once trust control
+and geometry are restored, bounded correction becomes useful and remains the
+most stable variant across backbones, cross-species splits, and perceptual
+baselines.
+
+This is consistent with the logic of Section~3: the generic-control failure is the
+empirical counterpart of Proposition~1, the weaker, less stable behavior of
+generic enhancement is consistent with Proposition~2, and the gain from
+rollback and branch fusion matches Proposition~3. The stronger claim is therefore
+not that every non-task-aware corrector fails, but that generic correction is
+unstable while retrieval-aligned correction is more reliable.
+
+\section{Limitations}
+
+Our formulation is intentionally conservative.
+Section~3 gives a local feasible-manifold analysis under smoothness and local
+curvature assumptions, not a proof of global optimality for deep retrieval
+training.
+Although the formulation is general, our strongest empirical validation is
+currently concentrated on wildlife benchmarks, where illumination shift is a
+salient nuisance; broader human-centered validation remains future work.
+RIIC-ReID also remains most appropriate when illumination is a major nuisance and
+identity depends on local texture structure; if lighting is not the bottleneck,
+or if a much larger backbone can already absorb it, the utility of a structured
+front-end may decrease.
+In the converse case---controlled lighting with minimal illumination
+variation---the rollback gates and trust mechanisms are designed to converge
+toward the raw branch, but we have not empirically verified that the front-end
+introduces zero residual perturbation in such benign settings.
+Finally, RIIC-ReID is architecturally heavier than the baseline, and we do not
+yet provide a dedicated runtime, parameter, or memory breakdown, so its benefit
+must be judged against deployment cost.
+
+\section{Conclusion}
+
+We presented RIIC-ReID, a task-aligned illumination correction framework for
+cross-light re-identification. The central claim is motivated by retrieval more
+broadly: the
+front-end should be optimized for retrieval geometry rather than perceptual
+preference alone. We instantiate and primarily validate that view in wildlife
+re-identification, where cross-camera illumination shift is especially severe.
+Weak photometric priors define a feasible set, trust mechanisms regulate how
+far correction is allowed to move, and teacher-guided geometry determines
+which direction is worthwhile inside that set. Proposition~1 motivates task
+alignment over pure photometric optimization, Proposition~2 motivates weak
+photometric regularization, and Proposition~3 motivates rollback and
+trust-bounded fusion.
+
+Empirically, the contrast between RIIC-ReID and the generic illumination control
+shows that illumination correction is not inherently beneficial for retrieval,
+but becomes useful and reliable once it is constrained by feasibility,
+moderated by trust, and selected by downstream retrieval structure.
+Across ATRW, cross-backbone tests, standardized fixed query-gallery evaluations
+on GZGC Zebra and StripeSpotter, and perceptual baselines such as Zero-DCE++
+and RetinexNet, the ordering is consistent: the most reliable gains come from
+learning illumination handling with the retrieval model rather than designing it
+for human perception alone.
+
+\bibliographystyle{ACM-Reference-Format}
+\bibliography{acmmm_mm2026_refs}
+
+\end{document}

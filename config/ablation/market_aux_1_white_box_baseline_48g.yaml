@@ -1,0 +1,395 @@
+illumination_module:
+  loss_params:
+    lambda_recon: 0.0
+    lambda_smooth: 0.0
+    lambda_edge: 0.0
+    lambda_structure: 0.0
+    lambda_sensitivity: 0.0
+    lambda_identity: 0.0
+    lambda_lab_chroma: 0.0
+    lambda_high_freq: 0.0
+    lambda_log_chroma: 0.0
+    chroma_mode: dual
+  module_params:
+    base_channels: 32
+    num_scales: 3
+    refine_iterations: 0
+    use_sensitivity: false
+    use_refinement: false
+    color_illumination_mode: local_rgb
+    clamp_input_range: false
+    wb_max_shift: 0.12
+    enable_task_aware_rollback: false
+    rollback_hidden_dim: 64
+    rollback_min_alpha: 0.05
+    rollback_max_alpha: 0.98
+    rollback_granularity: global
+    rollback_num_stripes: 6
+    use_model_aware_residual: false
+    model_residual_hidden_dim: 64
+    model_residual_scale: 0.15
+    enable_coarse_task_grad: false
+    coarse_guidance_mode: safe
+    num_grad_variants: 0
+    use_feature_guided: false
+    use_color_illumination: false
+    backbone_mid_channels: 384
+    safe_color_enabled: false
+    max_color_shift: 0.08
+    safe_gain_min: 0.5
+    safe_gain_max: 1.6
+    color_risk_scale: 3.0
+    max_color_risk: 0.55
+  module_type: disabled
+model:
+  backbone: osnet_ain_x1_0
+  local_extractor:
+    num_parts: 6
+    dropout: 0.0
+  feature_fusion:
+    enabled: false
+    hidden_dim: 128
+    init_corrected_bias: 2.0
+    include_illum_stats: true
+    max_residual_scale: 0.5
+  branch_attention_fusion:
+    enabled: false
+    hidden_dim: 128
+    num_branches: 3
+    temperature: 1.0
+    include_illum_stats: true
+  nuisance_head:
+    enabled: false
+    hidden_dim: 128
+    nuisance_dim: 64
+    photometric_dim: 4
+  illumination_module:
+    enabled: false
+    module_params:
+      use_sensitivity: false
+      use_refinement: false
+      use_feature_guided: false
+      use_color_illumination: false
+      enable_task_aware_rollback: false
+      enable_coarse_task_grad: false
+      safe_color_enabled: false
+      clamp_input_range: false
+      num_grad_variants: 0
+      refine_iterations: 0
+  reid_head:
+    type: local_stripe
+training:
+  output_dir: checkpoints/market_aux_ablation/white_box_baseline
+  batch_size: 128
+  learning_rate: 0.00035
+  image_height: 256
+  image_width: 128
+  weight_decay: 0.01
+  gradient_clip: 1.0
+  eval_interval: 10
+  pk_sampler:
+    enabled: true
+    p: 32
+    k: 4
+  center_loss:
+    enabled: true
+    weight: 0.0005
+    feat_dim: 256
+    lr_scale: 0.5
+  metric_learning:
+    ce_loss:
+      weight: 1.0
+      label_smoothing: 0.1
+      enabled: true
+    arcface_loss:
+      weight: 0.5
+      s: 30.0
+      m: 0.25
+      enabled: true
+    triplet_loss:
+      weight: 1.0
+      margin: 0.3
+      mining_type: soft
+      enabled: true
+    circle_loss:
+      weight: 0.0
+      margin: 0.25
+      gamma: 256
+      enabled: false
+    center_loss:
+      enabled: true
+      weight: 0.0005
+  iicl:
+    enabled: false
+    weight: 0.0
+    num_variants: 0
+    num_grad_variants: 0
+    temperature: 0.07
+    loss_type: cosine
+    variants: 2
+    memory_size: 2048
+    momentum: 0.9
+    variant_type: data_driven
+    mix_ratio: 0.7
+  photo_prior:
+    initial_weight: 0.0
+    min_weight: 0.0
+    decay_power: 1.0
+  cross_light_prototype:
+    enabled: true
+    weight: 0.12
+    similarity: cosine
+    photometric_scale: 8.0
+    photometric_offset: 0.1
+    min_gap_weight: 0.1
+  cross_light_margin_preserving:
+    enabled: false
+    weight: 0.15
+    similarity: cosine
+    photometric_scale: 8.0
+    photometric_offset: 0.1
+    topk_positive: 2
+    topk_negative: 4
+    margin_delta: 0.02
+    beta: 12.0
+  cross_light_softap:
+    enabled: false
+    weight: 0.18
+    similarity: cosine
+    photometric_scale: 8.0
+    photometric_offset: 0.1
+    min_positive_weight: 0.05
+    rank_temperature: 0.07
+    queue_size: 192
+  teacher_manifold:
+    enabled: false
+    tube_weight: 0.24
+    separation_weight: 0.08
+    similarity: cosine
+    photometric_scale: 8.0
+    photometric_offset: 0.1
+    min_positive_weight: 0.05
+    shrinkage: 0.8
+    orthogonal_weight: 1.0
+    subspace_rank: 1
+    min_radius: 0.02
+    margin: 0.08
+    queue_size: 192
+  ranking_topology:
+    enabled: false
+    weight: 0.18
+    similarity: cosine
+    photometric_scale: 8.0
+    photometric_offset: 0.1
+    min_positive_weight: 0.05
+    topk_positive: 2
+    topk_negative: 4
+    margin_slack: 0.01
+    beta: 12.0
+    queue_size: 192
+  anisotropic_identity_protection:
+    enabled: false
+    weight: 0.1
+    similarity: cosine
+    photometric_scale: 8.0
+    photometric_offset: 0.1
+    min_positive_weight: 0.05
+    topk_positive: 2
+    topk_negative: 4
+    subspace_rank: 1
+    identity_weight: 1.0
+    nuisance_weight: 0.5
+    nuisance_radius: 0.12
+  semantic_non_confusion:
+    enabled: true
+    weight: 0.06
+    margin_delta: 0.02
+    squared: true
+  nuisance_decoupling:
+    enabled: true
+    weight: 0.04
+    regression_weight: 1.0
+    decorrelation_weight: 0.5
+  teacher_prototype_anchor:
+    enabled: false
+    weight: 0.0
+    metric: cosine
+  relative_class_structure:
+    enabled: true
+    weight: 0.08
+    metric: cosine
+    radial_weight: 0.5
+  feature_trust_region:
+    enabled: true
+    weight: 0.05
+    base_radius: 0.12
+    adaptive_scale: 0.5
+    class_spread_scale: 0.0
+  local_rank_preserving:
+    enabled: true
+    weight: 0.1
+    alpha: 0.9
+    k_positive: 2
+    k_negative: 4
+  identity_image_preserving:
+    enabled: true
+    weight: 0.05
+  aux_gradient_gate:
+    enabled: true
+    eps: 1.0e-08
+  identity_preserving:
+    mode: geometry
+    phase2_scale: 0.0
+    phase3_scale: 0.0
+    anchor_weight: 0.0
+    geometry_weight: 0.0
+    logit_weight: 0.0
+    detach_reference: true
+    teacher_temperature: 2.0
+    similarity: cosine
+    geometry_loss: mse
+  phases:
+    phase1:
+      name: baseline_reid
+      epochs: 160
+      freeze_backbone: false
+      freeze_illumination: true
+      illumination_weight: 0.0
+      reid_weight: 1.0
+      backbone_lr: 0.00035
+      use_backbone_checkpointing: false
+    phase2:
+      name: baseline_phase2_disabled
+      epochs: 0
+      freeze_backbone: true
+      freeze_illumination: true
+      illumination_weight: 0.0
+      reid_weight: 0.0
+    phase3:
+      name: baseline_phase3_disabled
+      epochs: 0
+      freeze_backbone: false
+      freeze_illumination: true
+      illumination_weight: 0.0
+      reid_weight: 1.0
+      backbone_lr: 0.00035
+  early_stopping:
+    enabled: true
+    patience: 30
+    monitor: mAP
+    min_delta: 0.001
+  data_dir: data/processed/market/train
+  query_dir: data/processed/market/query
+  gallery_dir: data/processed/market/gallery
+  image_size: 256
+  adversary:
+    enabled: true
+    num_conditions: 4
+data_augmentation:
+  image_size: 256
+  random_horizontal_flip: 0.5
+  color_jitter:
+    brightness: 0.1
+    contrast: 0.1
+    saturation: 0.1
+    hue: 0.02
+  random_crop:
+    enabled: true
+    scale:
+    - 0.85
+    - 1.0
+    ratio:
+    - 0.9
+    - 1.1
+  random_erasing:
+    enabled: true
+    probability: 0.5
+    scale:
+    - 0.02
+    - 0.2
+    ratio:
+    - 0.3
+    - 3.3
+  random_rotation: 15
+  normalize:
+    mean:
+    - 0.485
+    - 0.456
+    - 0.406
+    std:
+    - 0.229
+    - 0.224
+    - 0.225
+yolo:
+  model_path: fea_data/yolov8m-seg.pt
+  conf_threshold: 0.3
+evaluation:
+  eval_interval: 10
+  flip_test: true
+  rerank: false
+  rerank_params:
+    k1: 20
+    k2: 6
+    lambda_value: 0.3
+  protocol: query_gallery
+  additional_protocols: []
+  best_metric: mAP
+  strict_protocol_check: true
+  atrw:
+    data_root: null
+    test_dir: null
+    eval_script_dir: ATRWEvalScript-main
+    batch_size: 64
+    num_workers: 4
+    train_ratio: 0.7
+    seed: 42
+  query_dir: data/processed/market/query
+  gallery_dir: data/processed/market/gallery
+  reranking:
+    enabled: false
+    k1: 20
+    k2: 6
+    lambda_value: 0.3
+  feature_extraction:
+    flip_test: true
+    normalize: true
+    exclude_same_camera: true
+checkpointing:
+  save_interval: 10
+  max_keep: 5
+  save_best_only: false
+hardware:
+  num_workers: 12
+  use_amp: true
+  amp_dtype: bfloat16
+  use_backbone_checkpointing: false
+  use_ddp: false
+  ddp_backend: nccl
+  ddp_find_unused_parameters: false
+  ddp_timeout_minutes: 30
+  device: cuda
+  pin_memory: true
+  prefetch_factor: 4
+logging:
+  log_interval: 100
+  tensorboard: true
+  wandb:
+    enabled: false
+    project: market1501-reid-48g
+    entity: null
+output_dir: ./checkpoints/market_aux_ablation/white_box_baseline
+baseline:
+  enabled: true
+  type: whitebox_no_illumination
+  source_backbone: osnet_ain_x1_0
+  baseline_backbone: osnet_ain_x1_0
+  source_total_epochs: 160
+  baseline_total_epochs: 160
+  disabled_components:
+  - illumination_module
+  - feature_fusion
+  - iicl
+  - photo_prior
+  - identity_preserving_geometry
+  evaluation_protocol: query_gallery
+  best_metric: mAP

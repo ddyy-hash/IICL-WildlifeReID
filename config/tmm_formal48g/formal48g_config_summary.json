@@ -1,0 +1,50 @@
+[
+  {
+    "dataset": "gzgc_zebra",
+    "path": "E:/dog_web_now/dog_reid_web/config/tmm_formal48g/illumination_config_gzgc_zebra_tmm48g_primary.yaml",
+    "local_trial": "checkpoints/tuning/tmm_multifidelity_zebra_leopard_phase1_20260511_122703/gzgc_zebra/trial_005/trial_result.json",
+    "local_metrics": {
+      "rank1": 40.0,
+      "rank5": 60.0,
+      "rank10": 60.0,
+      "mAP": 28.89864131396055
+    },
+    "formal_p": 16,
+    "formal_k": 3,
+    "formal_batch": 48,
+    "formal_learning_rate": 0.00044856627874833536,
+    "formal_phase3_backbone_lr": 0.0002337902008882727
+  },
+  {
+    "dataset": "leopard",
+    "path": "E:/dog_web_now/dog_reid_web/config/tmm_formal48g/illumination_config_leopard_tmm48g_primary.yaml",
+    "local_trial": "checkpoints/tuning/tmm_multifidelity_zebra_leopard_phase1_20260511_122703/leopard/trial_007/trial_result.json",
+    "local_metrics": {
+      "rank1": 66.66666666666666,
+      "rank5": 80.0,
+      "rank10": 86.66666666666667,
+      "mAP": 38.87255722712366
+    },
+    "formal_p": 12,
+    "formal_k": 3,
+    "formal_batch": 36,
+    "formal_learning_rate": 0.00042,
+    "formal_phase3_backbone_lr": 0.00022330111779098784
+  },
+  {
+    "dataset": "whaleshark",
+    "path": "E:/dog_web_now/dog_reid_web/config/tmm_formal48g/illumination_config_whaleshark_tmm48g_primary.yaml",
+    "local_trial": "checkpoints/tuning/tmm_whaleshark_fullsel_phase1_20260511_132656/whaleshark/trial_001/trial_result.json",
+    "local_metrics": {
+      "rank1": 24.0,
+      "rank5": 52.0,
+      "rank10": 57.99999999999999,
+      "mAP": 10.836105692112938
+    },
+    "formal_p": 10,
+    "formal_k": 4,
+    "formal_batch": 40,
+    "formal_learning_rate": 0.0002593139755432876,
+    "formal_phase3_backbone_lr": 0.00012797595459534776
+  }
+]

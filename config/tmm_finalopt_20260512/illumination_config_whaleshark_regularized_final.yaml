@@ -1,0 +1,337 @@
+illumination_module:
+  module_type: IPAIDModule
+  loss_params:
+    lambda_recon: 1.0
+    lambda_smooth: 0.12
+    lambda_edge: 0.08
+    lambda_structure: 0.12
+    lambda_sensitivity: 0.02
+    lambda_identity: 0.3
+    lambda_lab_chroma: 0.05
+    lambda_high_freq: 0.05
+    lambda_log_chroma: 0.06
+    chroma_mode: dual
+  module_params:
+    base_channels: 32
+    num_scales: 3
+    refine_iterations: 2
+    use_sensitivity: true
+    use_refinement: true
+    use_feature_guided: true
+    use_color_illumination: true
+    color_illumination_mode: local_rgb
+    species_type: spot
+    backbone_mid_channels: 384
+    safe_color_enabled: true
+    max_color_shift: 0.08
+    safe_gain_min: 0.55
+    safe_gain_max: 1.85
+    color_risk_scale: 3.2
+    max_color_risk: 0.6
+    clamp_input_range: true
+    wb_max_shift: 0.12
+    enable_task_aware_rollback: true
+    rollback_hidden_dim: 64
+    rollback_min_alpha: 0.08
+    rollback_max_alpha: 0.97
+    rollback_granularity: stripe
+    rollback_num_stripes: 6
+    use_model_aware_residual: true
+    model_residual_hidden_dim: 64
+    model_residual_scale: 0.15
+    enable_coarse_task_grad: true
+    coarse_guidance_mode: safe
+    num_grad_variants: 0
+model:
+  backbone: osnet_ain_x1_0
+  local_extractor:
+    num_parts: 6
+    dropout: 0.18626045772426533
+  feature_fusion:
+    enabled: true
+    hidden_dim: 128
+    init_corrected_bias: 1.109434936606867
+    include_illum_stats: true
+    max_residual_scale: 0.39587340531014725
+  branch_attention_fusion:
+    enabled: true
+    hidden_dim: 128
+    num_branches: 3
+    temperature: 1.0
+    include_illum_stats: true
+  nuisance_head:
+    enabled: true
+    hidden_dim: 128
+    nuisance_dim: 64
+    photometric_dim: 4
+  illumination_module:
+    enabled: true
+training:
+  data_dir: data/processed/whaleshark/train
+  query_dir: data/processed/whaleshark/query
+  gallery_dir: data/processed/whaleshark/gallery
+  output_dir: checkpoints/tmm_finalopt_20260512/whaleshark/regularized_final
+  num_classes: 372
+  image_height: 256
+  image_width: 256
+  image_size: 256
+  batch_size: 40
+  learning_rate: 0.00022819629847809308
+  weight_decay: 0.0033427737585436683
+  gradient_clip: 1.0
+  eval_interval: 5
+  pk_sampler:
+    enabled: true
+    p: 10
+    k: 4
+  center_loss:
+    enabled: true
+    weight: 0.0005
+    feat_dim: 256
+    lr_scale: 0.5
+  metric_learning:
+    ce_loss:
+      enabled: true
+      label_smoothing: 0.18
+      weight: 1.0
+    arcface_loss:
+      enabled: true
+      weight: 0.3571766632444067
+      s: 30.0
+      m: 0.26164827067356383
+    triplet_loss:
+      enabled: true
+      margin: 0.3
+      mining_type: soft
+      weight: 1.115543503097855
+    circle_loss:
+      enabled: false
+      margin: 0.25
+      gamma: 256
+      weight: 0.0
+  iicl:
+    enabled: true
+    weight: 0.07199393585200001
+    temperature: 0.07
+    loss_type: cosine
+    num_variants: 2
+    num_grad_variants: 0
+    variant_type: data_driven
+    mix_ratio: 0.7
+  photo_prior:
+    initial_weight: 0.5
+    min_weight: 0.05
+    decay_power: 1.5
+  cross_light_prototype:
+    enabled: false
+    weight: 0.12
+  cross_light_margin_preserving:
+    enabled: false
+    weight: 0.12
+  cross_light_softap:
+    enabled: true
+    weight: 0.08224035769241644
+    similarity: cosine
+    photometric_scale: 8.0
+    photometric_offset: 0.1
+    min_positive_weight: 0.05
+    rank_temperature: 0.07
+    queue_size: 128
+  teacher_manifold:
+    enabled: true
+    tube_weight: 0.2023453928410029
+    separation_weight: 0.08758442789877367
+    similarity: cosine
+    photometric_scale: 8.0
+    photometric_offset: 0.1
+    min_positive_weight: 0.05
+    shrinkage: 0.8
+    orthogonal_weight: 1.0
+    subspace_rank: 1
+    min_radius: 0.02
+    margin: 0.08
+    queue_size: 128
+  ranking_topology:
+    enabled: false
+    weight: 0.0
+  anisotropic_identity_protection:
+    enabled: false
+    weight: 0.0
+  semantic_non_confusion:
+    enabled: false
+    weight: 0.0
+  nuisance_decoupling:
+    enabled: true
+    weight: 0.04
+    regression_weight: 0.0
+    decorrelation_weight: 0.5
+  teacher_prototype_anchor:
+    enabled: false
+    weight: 0.0
+  relative_class_structure:
+    enabled: false
+    weight: 0.0
+  feature_trust_region:
+    enabled: false
+    weight: 0.0
+  local_rank_preserving:
+    enabled: false
+    weight: 0.0
+  identity_image_preserving:
+    enabled: true
+    weight: 0.02
+  aux_gradient_gate:
+    enabled: true
+    eps: 1.0e-08
+  identity_preserving:
+    mode: softap
+    phase2_scale: 0.0
+    phase3_scale: 1.0
+    anchor_weight: 0.35
+    geometry_weight: 12.0
+    logit_weight: 0.03
+    detach_reference: true
+    teacher_temperature: 2.0
+    similarity: cosine
+    geometry_loss: mse
+  phases:
+    phase1:
+      name: backbone_warmup
+      epochs: 15
+      freeze_backbone: false
+      freeze_illumination: true
+      illumination_weight: 0.0
+      reid_weight: 1.0
+      backbone_lr: 0.00022819629847809308
+    phase2:
+      name: fgid_warmup
+      epochs: 0
+      freeze_backbone: true
+      freeze_illumination: false
+      illumination_weight: 1.0
+      reid_weight: 0.0
+      illumination_lr: 0.0001
+    phase3:
+      name: joint_training
+      epochs: 55
+      batch_size: 40
+      use_backbone_checkpointing: true
+      freeze_backbone: false
+      freeze_illumination: false
+      illumination_weight: 0.2946707993695006
+      reid_weight: 1.0
+      illumination_lr: 7.117722565606992e-05
+      backbone_lr: 0.00010494028276818516
+      aux_ramp:
+        enabled: true
+        epochs: 8
+        illumination_start: 0.05
+        illumination_end: 0.2946707993695006
+        iicl_start: 0.0
+        iicl_end: 0.07199393585200001
+        cross_light_start: 0.0
+        cross_light_end: 0.09137817521379604
+data_augmentation:
+  image_size: 256
+  random_horizontal_flip: 0.5
+  color_jitter:
+    brightness: 0.13994984792972698
+    contrast: 0.11712767603314923
+    saturation: 0.047160388679315796
+    hue: 0.023189586944200185
+  random_crop:
+    enabled: true
+    scale:
+    - 0.86
+    - 1.0
+    ratio:
+    - 0.85
+    - 1.18
+  random_erasing:
+    enabled: true
+    probability: 0.4766470351545862
+    scale:
+    - 0.02
+    - 0.18
+    ratio:
+    - 0.3
+    - 3.0
+  random_grayscale:
+    enabled: true
+    probability: 0.03
+  normalize:
+    mean:
+    - 0.485
+    - 0.456
+    - 0.406
+    std:
+    - 0.229
+    - 0.224
+    - 0.225
+evaluation:
+  eval_interval: 5
+  protocol: query_gallery
+  selection_query_dir: data/processed/whaleshark/selection_query
+  selection_gallery_dir: data/processed/whaleshark/selection_gallery
+  selection_info: data/processed/whaleshark/split_info.json
+  query_dir: data/processed/whaleshark/query
+  gallery_dir: data/processed/whaleshark/gallery
+  best_metric: mAP
+  strict_protocol_check: true
+  additional_protocols: []
+  reranking:
+    enabled: false
+    k1: 20
+    k2: 6
+    lambda_value: 0.3
+  feature_extraction:
+    flip_test: true
+    normalize: true
+    exclude_same_camera: false
+checkpointing:
+  save_interval: 5
+  max_keep: 6
+  save_best_only: false
+logging:
+  log_interval: 20
+  tensorboard: true
+  wandb:
+    enabled: false
+    project: tmm-whaleshark-match12g
+hardware:
+  device: cuda
+  num_workers: 4
+  use_amp: true
+  amp_dtype: bfloat16
+  use_backbone_checkpointing: true
+  use_ddp: false
+  pin_memory: true
+  prefetch_factor: 2
+paper_protocol:
+  source_dataset_protocol: match_aware_identity_disjoint_query_gallery
+  training_selection_protocol: self_defined_train_qg
+  final_report_protocol: query_gallery
+  selection_metric: mAP
+output_dir: checkpoints/tmm_finalopt_20260512/whaleshark/regularized_final
+tmm_formal48g_source:
+  selected_trial_result: checkpoints/tuning/tmm_whaleshark_fullsel_phase1_20260511_132656/whaleshark/trial_001/trial_result.json
+  local_selection_metrics:
+    rank1: 24.0
+    rank5: 52.0
+    rank10: 57.99999999999999
+    mAP: 10.836105692112938
+  local_proxy_score: 11.316105692112938
+  local_batch: 24
+  formal_batch: 40
+  lr_scaling: sqrt(formal_batch/local_batch) with dataset cap
+  lr_scale: 1.2909944487358056
+  formal_learning_rate: 0.0002593139755432876
+  formal_phase3_backbone_lr: 0.00012797595459534776
+output:
+  checkpoint_dir: checkpoints/tmm_finalopt_20260512/whaleshark/regularized_final
+  log_dir: checkpoints/tmm_finalopt_20260512/whaleshark/regularized_final
+tmm_finalopt_20260512:
+  dataset: whaleshark
+  variant: regularized_final
+  selection_protocol: fixed final query/gallery benchmark
+  phase3_epochs: 55

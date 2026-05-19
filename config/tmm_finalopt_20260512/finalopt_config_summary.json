@@ -1,0 +1,83 @@
+[
+  {
+    "dataset": "gzgc_zebra",
+    "variant": "final_primary",
+    "path": "E:/dog_web_now/dog_reid_web/config/tmm_finalopt_20260512/illumination_config_gzgc_zebra_final_primary.yaml",
+    "output_dir": "checkpoints/tmm_finalopt_20260512/gzgc_zebra/final_primary",
+    "phase3_epochs": 55,
+    "protocol": "query_gallery",
+    "best_metric": "mAP"
+  },
+  {
+    "dataset": "gzgc_zebra",
+    "variant": "identity_conservative",
+    "path": "E:/dog_web_now/dog_reid_web/config/tmm_finalopt_20260512/illumination_config_gzgc_zebra_identity_conservative.yaml",
+    "output_dir": "checkpoints/tmm_finalopt_20260512/gzgc_zebra/identity_conservative",
+    "phase3_epochs": 55,
+    "protocol": "query_gallery",
+    "best_metric": "mAP"
+  },
+  {
+    "dataset": "gzgc_zebra",
+    "variant": "regularized_final",
+    "path": "E:/dog_web_now/dog_reid_web/config/tmm_finalopt_20260512/illumination_config_gzgc_zebra_regularized_final.yaml",
+    "output_dir": "checkpoints/tmm_finalopt_20260512/gzgc_zebra/regularized_final",
+    "phase3_epochs": 55,
+    "protocol": "query_gallery",
+    "best_metric": "mAP"
+  },
+  {
+    "dataset": "leopard",
+    "variant": "final_primary",
+    "path": "E:/dog_web_now/dog_reid_web/config/tmm_finalopt_20260512/illumination_config_leopard_final_primary.yaml",
+    "output_dir": "checkpoints/tmm_finalopt_20260512/leopard/final_primary",
+    "phase3_epochs": 55,
+    "protocol": "query_gallery",
+    "best_metric": "mAP"
+  },
+  {
+    "dataset": "leopard",
+    "variant": "identity_conservative",
+    "path": "E:/dog_web_now/dog_reid_web/config/tmm_finalopt_20260512/illumination_config_leopard_identity_conservative.yaml",
+    "output_dir": "checkpoints/tmm_finalopt_20260512/leopard/identity_conservative",
+    "phase3_epochs": 55,
+    "protocol": "query_gallery",
+    "best_metric": "mAP"
+  },
+  {
+    "dataset": "leopard",
+    "variant": "regularized_final",
+    "path": "E:/dog_web_now/dog_reid_web/config/tmm_finalopt_20260512/illumination_config_leopard_regularized_final.yaml",
+    "output_dir": "checkpoints/tmm_finalopt_20260512/leopard/regularized_final",
+    "phase3_epochs": 55,
+    "protocol": "query_gallery",
+    "best_metric": "mAP"
+  },
+  {
+    "dataset": "whaleshark",
+    "variant": "final_primary",
+    "path": "E:/dog_web_now/dog_reid_web/config/tmm_finalopt_20260512/illumination_config_whaleshark_final_primary.yaml",
+    "output_dir": "checkpoints/tmm_finalopt_20260512/whaleshark/final_primary",
+    "phase3_epochs": 55,
+    "protocol": "query_gallery",
+    "best_metric": "mAP"
+  },
+  {
+    "dataset": "whaleshark",
+    "variant": "identity_conservative",
+    "path": "E:/dog_web_now/dog_reid_web/config/tmm_finalopt_20260512/illumination_config_whaleshark_identity_conservative.yaml",
+    "output_dir": "checkpoints/tmm_finalopt_20260512/whaleshark/identity_conservative",
+    "phase3_epochs": 55,
+    "protocol": "query_gallery",
+    "best_metric": "mAP"
+  },
+  {
+    "dataset": "whaleshark",
+    "variant": "regularized_final",
+    "path": "E:/dog_web_now/dog_reid_web/config/tmm_finalopt_20260512/illumination_config_whaleshark_regularized_final.yaml",
+    "output_dir": "checkpoints/tmm_finalopt_20260512/whaleshark/regularized_final",
+    "phase3_epochs": 55,
+    "protocol": "query_gallery",
+    "best_metric": "mAP"
+  }
+]

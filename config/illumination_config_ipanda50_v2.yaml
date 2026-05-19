@@ -1,0 +1,219 @@
+# =============================================================================
+# =============================================================================
+#
+# =============================================================================
+
+# =============================================================================
+# =============================================================================
+illumination_module:
+  module_type: "IPAIDModule"
+  
+  loss_params:
+    lambda_recon: 1.0
+    lambda_smooth: 0.15
+    lambda_edge: 0.10
+    lambda_sensitivity: 0.02
+    lambda_identity: 0.1
+    
+  module_params:
+    base_channels: 32
+    num_scales: 3
+    refine_iterations: 2
+    use_sensitivity: true
+    use_refinement: true
+
+# =============================================================================
+# =============================================================================
+model:
+  backbone: "osnet_ain_x1_0"
+  pretrained: true
+  feature_dim: 512
+  
+  illumination_module:
+    enabled: true
+    method: "ipaid"
+  
+  local_extractor:
+    enabled: true
+    num_parts: 6
+    attention_type: "se"
+    pooling: "gem"
+    dropout: 0.5
+
+# =============================================================================
+# =============================================================================
+training:
+  data_dir: "data/processed/ipanda50/train"
+  test_dir: "data/processed/ipanda50/test"
+  output_dir: "checkpoints/joint_ipanda50_v2"
+  
+  num_classes: 50
+  batch_size: 32               # 8×4=32
+  image_height: 256
+  image_width: 256
+  num_workers: 4
+  
+  learning_rate: 0.00025
+  weight_decay: 0.05
+  
+  pk_sampler:
+    enabled: true
+    p: 8
+    k: 4
+
+  # Center Loss
+  center_loss:
+    enabled: true
+    weight: 0.0005
+    feat_dim: 256
+    lr_scale: 0.5
+  
+  phases:
+    phase1:
+      name: "backbone_warmup"
+      epochs: 8
+      freeze_backbone: false
+      freeze_illumination: true
+      illumination_weight: 0.0
+      reid_weight: 1.0
+      backbone_lr: 0.00025
+      warmup_epochs: 0
+      
+    phase2:
+      name: "joint_finetuning"
+      epochs: 100
+      freeze_backbone: false
+      illumination_weight: 0.2
+      reid_weight: 1.0
+      illumination_lr: 0.00003  # 3e-5
+      backbone_lr: 0.00015
+      warmup_epochs: 0
+  
+  scheduler:
+    type: "CosineAnnealingWarmRestarts"
+    T_0: 20
+    T_mult: 2
+    eta_min: 0.000001
+  
+  gradient_clip: 1.0
+  
+  early_stopping:
+    enabled: true
+    patience: 15
+    monitor: "mAP"
+    min_delta: 0.005
+  
+  metric_learning:
+    ce_loss:
+      enabled: true
+      label_smoothing: 0.35
+      weight: 1.0
+    
+    arcface_loss:
+      enabled: true
+      weight: 0.3
+      s: 25.0
+      m: 0.20
+    
+    triplet_loss:
+      enabled: true
+      margin: 0.25
+      mining_type: "soft"
+      weight: 0.8
+    
+    circle_loss:
+      enabled: false
+      weight: 0.0
+    
+    center_loss:
+      enabled: true
+      weight: 0.0003
+
+  iicl:
+    enabled: true
+    weight: 1.5
+    temperature: 0.07
+    variants: 3
+    memory_size: 1024
+    momentum: 0.9
+
+# =============================================================================
+# =============================================================================
+data_augmentation:
+  random_horizontal_flip: 0.5
+  random_rotation: 20
+  
+  random_crop:
+    enabled: true
+    scale: [0.75, 1.0]
+    ratio: [0.8, 1.2]
+  
+  random_erasing:
+    enabled: true
+    probability: 0.7
+    scale: [0.05, 0.35]
+    ratio: [0.3, 3.3]
+  
+  color_jitter:
+    brightness: 0.3
+    contrast: 0.3
+    saturation: 0.2
+    hue: 0.05
+  
+  mixup:
+    enabled: true
+    alpha: 0.2
+  
+  normalize:
+    mean: [0.485, 0.456, 0.406]
+    std: [0.229, 0.224, 0.225]
+
+# =============================================================================
+# =============================================================================
+evaluation:
+  protocol: "all_vs_all"
+  eval_interval: 3
+  
+  reranking:
+    enabled: false
+    k1: 20
+    k2: 6
+    lambda_value: 0.3
+  
+  feature_extraction:
+    flip_test: true
+    normalize: true
+
+# =============================================================================
+# =============================================================================
+output:
+  checkpoint_dir: "checkpoints/joint_ipanda50_v2"
+  log_dir: "checkpoints/joint_ipanda50_v2"
+
+checkpointing:
+  save_interval: 5
+  save_best_only: false
+  max_keep: 3
+
+logging:
+  log_interval: 20
+  tensorboard: true
+  wandb:
+    enabled: false
+    project: "ipanda50-reid-v2"
+
+# =============================================================================
+# =============================================================================
+yolo:
+  model_path: "fea_data/yolov8m-seg.pt"
+  conf_threshold: 0.3
+  use_soft_mask: true
+  enabled: false
+
+# =============================================================================
+# =============================================================================
+hardware:
+  device: "cuda"
+  num_workers: 4
+  pin_memory: true
+  prefetch_factor: 2

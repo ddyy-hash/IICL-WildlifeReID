@@ -1,12 +1,3 @@
-"""
-LeopardID2022 数据预处理脚本 v2
-自适应划分策略 - 处理长尾分布
-
-策略:
-- 样本>=10张: 标准 70/15/15 划分
-- 样本 5-9张: 80/10/10 划分
-- 样本 3-4张: train全部, query/gallery各复用1张
-"""
 
 import os
 import json
@@ -21,7 +12,6 @@ import multiprocessing
 
 
 def load_coco_annotations(ann_file):
-    """加载COCO格式标注"""
     with open(ann_file, 'r', encoding='utf-8') as f:
         data = json.load(f)
     
@@ -46,7 +36,6 @@ def load_coco_annotations(ann_file):
 
 
 def crop_image(img_path, bbox, output_path, padding=0.1):
-    """从原图裁剪出目标区域"""
     try:
         if not bbox or len(bbox) != 4 or bbox[2] <= 0 or bbox[3] <= 0:
             shutil.copy2(img_path, output_path)
@@ -78,12 +67,7 @@ def crop_image(img_path, bbox, output_path, padding=0.1):
 
 
 def adaptive_split(n_images):
-    """
-    自适应划分策略
-    返回 (train_ratio, query_count, gallery_count)
-    """
     if n_images >= 10:
-        # 标准划分
         n_train = int(n_images * 0.70)
         n_query = max(1, int(n_images * 0.15))
         n_gallery = n_images - n_train - n_query
@@ -98,17 +82,12 @@ def adaptive_split(n_images):
             n_gallery = 1
         return n_train, n_query, n_gallery
     elif n_images >= 3:
-        # 全部放train，query/gallery各复用1张
-        # 返回特殊标记 -1 表示复用模式
         return -1, 1, 1
     else:
-        return 0, 0, 0  # 跳过
+        return 0, 0, 0
 
 
 def process_dataset_v2(src_dir, dst_dir, seed=42, num_workers=8):
-    """
-    处理LeopardID2022数据集 v2 - 自适应划分
-    """
     random.seed(seed)
     
     ann_file = os.path.join(src_dir, 'annotations', 'instances_train2022.json')
@@ -121,7 +100,6 @@ def process_dataset_v2(src_dir, dst_dir, seed=42, num_workers=8):
     
     print(f"Found {len(identity_images)} identities")
     
-    # 创建输出目录
     train_dir = os.path.join(dst_dir, 'train')
     query_dir = os.path.join(dst_dir, 'query')
     gallery_dir = os.path.join(dst_dir, 'gallery')
@@ -135,7 +113,7 @@ def process_dataset_v2(src_dir, dst_dir, seed=42, num_workers=8):
         'query': {'images': 0, 'identities': 0},
         'gallery': {'images': 0, 'identities': 0},
         'skipped': 0,
-        'reuse_mode': 0  # 复用模式的个体数
+        'reuse_mode': 0
     }
     
     print("Preparing tasks with adaptive split...")
@@ -156,7 +134,6 @@ def process_dataset_v2(src_dir, dst_dir, seed=42, num_workers=8):
         gallery_id_dir = os.path.join(gallery_dir, safe_id)
         
         if n_train == -1:
-            # 复用模式: 全部放train，从train中选1张到query和gallery
             stats['reuse_mode'] += 1
             os.makedirs(train_id_dir, exist_ok=True)
             os.makedirs(query_id_dir, exist_ok=True)
@@ -169,14 +146,12 @@ def process_dataset_v2(src_dir, dst_dir, seed=42, num_workers=8):
                     tasks.append((src_path, info['bbox'], dst_path))
                     stats['train']['images'] += 1
             
-            # 复用第一张到query
             src_path = os.path.join(images_dir, images_info[0]['filename'])
             dst_path = os.path.join(query_id_dir, "q_0000.jpg")
             if os.path.exists(src_path):
                 tasks.append((src_path, images_info[0]['bbox'], dst_path))
                 stats['query']['images'] += 1
             
-            # 复用最后一张到gallery
             src_path = os.path.join(images_dir, images_info[-1]['filename'])
             dst_path = os.path.join(gallery_id_dir, "g_0000.jpg")
             if os.path.exists(src_path):
@@ -187,7 +162,6 @@ def process_dataset_v2(src_dir, dst_dir, seed=42, num_workers=8):
             stats['query']['identities'] += 1
             stats['gallery']['identities'] += 1
         else:
-            # 标准划分
             train_images = images_info[:n_train]
             query_images = images_info[n_train:n_train + n_query]
             gallery_images = images_info[n_train + n_query:]
@@ -225,7 +199,6 @@ def process_dataset_v2(src_dir, dst_dir, seed=42, num_workers=8):
     print(f"Total tasks: {len(tasks)}")
     print(f"Reuse mode identities: {stats['reuse_mode']}")
     
-    # 多进程并行处理
     success = 0
     failed = 0
     
@@ -239,9 +212,8 @@ def process_dataset_v2(src_dir, dst_dir, seed=42, num_workers=8):
             else:
                 failed += 1
     
-    # 打印统计
     print("\n" + "=" * 50)
-    print("LeopardID2022 预处理完成 (v2 自适应划分)")
+    print("LeopardID2022 preprocessing complete (v2 adaptive split)")
     print("=" * 50)
     print(f"Train:   {stats['train']['images']:5d} images, {stats['train']['identities']:3d} identities")
     print(f"Query:   {stats['query']['images']:5d} images, {stats['query']['identities']:3d} identities")

@@ -1,0 +1,218 @@
+# =============================================================================
+# =============================================================================
+
+# =============================================================================
+# =============================================================================
+illumination_module:
+  module_type: "IPAIDModule"
+
+  loss_params:
+    lambda_recon: 1.0
+    lambda_smooth: 0.15
+    lambda_edge: 0.08
+    lambda_sensitivity: 0.02
+    lambda_identity: 0.1
+    lambda_lab_chroma: 0.1
+    lambda_high_freq: 0.05
+
+  module_params:
+    base_channels: 32
+    num_scales: 3
+    refine_iterations: 2
+    use_sensitivity: true
+    use_refinement: true
+    use_feature_guided: true
+    use_color_illumination: true
+    backbone_mid_channels: 384
+    safe_color_enabled: true
+    max_color_shift: 0.08
+    safe_gain_min: 0.5
+    safe_gain_max: 1.6
+    color_risk_scale: 3.0
+    max_color_risk: 0.55
+
+# =============================================================================
+# =============================================================================
+training:
+  batch_size: 20
+  image_height: 256
+  image_width: 256
+  image_size: 256
+  num_workers: 4
+
+  learning_rate: 0.00035
+  weight_decay: 0.01
+
+  pk_sampler:
+    enabled: true
+    p: 4
+    k: 5
+
+  center_loss:
+    enabled: true
+    weight: 0.0005
+    feat_dim: 256
+    lr_scale: 0.5
+
+  phases:
+    phase1:
+      name: "backbone_warmup"
+      epochs: 15
+      freeze_backbone: false
+      freeze_illumination: true
+      illumination_weight: 0.0
+      reid_weight: 1.0
+      backbone_lr: 0.00035
+
+    phase2:
+      name: "fgid_warmup"
+      epochs: 15
+      freeze_backbone: true
+      freeze_illumination: false
+      illumination_weight: 1.0
+      reid_weight: 0.0
+      lr: 0.0001
+
+    phase3:
+      name: "joint_training"
+      epochs: 100
+      freeze_backbone: false
+      freeze_illumination: false
+      illumination_weight: 0.2
+      reid_weight: 1.0
+      illumination_lr: 0.00005
+      backbone_lr: 0.000175
+      use_auto_weight: true
+      grl_warmup_epochs: 20
+      grl_max_lambda: 1.0
+
+  gradient_clip: 1.0
+
+  early_stopping:
+    enabled: true
+    patience: 30
+    monitor: "mAP"
+    min_delta: 0.001
+
+  metric_learning:
+    ce_loss:
+      enabled: true
+      label_smoothing: 0.2
+      weight: 1.0
+
+    arcface_loss:
+      enabled: true
+      weight: 0.5
+      s: 30.0
+      m: 0.25
+
+    triplet_loss:
+      enabled: true
+      margin: 0.3
+      mining_type: "soft"
+      weight: 1.0
+
+    circle_loss:
+      enabled: false
+      margin: 0.25
+      gamma: 256
+      weight: 0.0
+
+    center_loss:
+      enabled: true
+      weight: 0.0005
+
+  iicl:
+    enabled: false
+    weight: 0.0
+    temperature: 0.07
+    variants: 2
+    memory_size: 1024
+    momentum: 0.9
+    variant_type: "data_driven"
+    mix_ratio: 0.7
+
+  adversary:
+    enabled: true
+    num_conditions: 4
+
+  eval_interval: 5
+
+# =============================================================================
+# =============================================================================
+model:
+  backbone: "osnet_ain_x1_0"
+
+  local_extractor:
+    num_parts: 6
+    dropout: 0.0
+
+  illumination_module:
+    enabled: true
+
+# =============================================================================
+# =============================================================================
+data_augmentation:
+  random_horizontal_flip: 0.5
+  random_rotation: 15
+  random_crop:
+    enabled: true
+    scale: [0.85, 1.0]
+    ratio: [0.9, 1.1]
+  random_erasing:
+    enabled: true
+    probability: 0.5
+    scale: [0.02, 0.2]
+    ratio: [0.3, 3.3]
+
+  color_jitter:
+    brightness: 0.1
+    contrast: 0.1
+    saturation: 0.1
+    hue: 0.02
+
+  normalize:
+    mean: [0.485, 0.456, 0.406]
+    std: [0.229, 0.224, 0.225]
+
+# =============================================================================
+# =============================================================================
+evaluation:
+  eval_interval: 5
+  protocol: "val_split_70_30"
+  best_metric: "rank1"
+  strict_protocol_check: true
+  reranking:
+    enabled: false
+    k1: 20
+    k2: 6
+    lambda_value: 0.3
+
+  feature_extraction:
+    flip_test: true
+    normalize: true
+    exclude_same_camera: false
+
+checkpointing:
+  save_interval: 10
+  save_best_only: false
+  max_keep: 5
+
+logging:
+  log_interval: 20
+  tensorboard: true
+  wandb:
+    enabled: false
+    project: "tiger-reid-ablation-fgid"
+    entity: null
+
+hardware:
+  device: "cuda"
+  num_workers: 4
+  pin_memory: true
+  prefetch_factor: 2
+
+output_dir: "./checkpoints/ablation/atrw_fgid"
+
+# =============================================================================
+# =============================================================================

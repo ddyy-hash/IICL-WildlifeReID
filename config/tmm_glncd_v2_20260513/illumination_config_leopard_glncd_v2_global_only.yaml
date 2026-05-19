@@ -1,0 +1,369 @@
+illumination_module:
+  module_type: IPAIDModule
+  loss_params:
+    lambda_recon: 1.0
+    lambda_smooth: 0.12
+    lambda_edge: 0.08
+    lambda_structure: 0.12
+    lambda_sensitivity: 0.02
+    lambda_identity: 0.28
+    lambda_lab_chroma: 0.04
+    lambda_high_freq: 0.05
+    lambda_log_chroma: 0.05
+    chroma_mode: dual
+  module_params:
+    base_channels: 32
+    num_scales: 3
+    refine_iterations: 1
+    use_sensitivity: true
+    use_refinement: true
+    use_feature_guided: true
+    use_color_illumination: true
+    color_illumination_mode: global_white_balance
+    species_type: spotted
+    backbone_mid_channels: 384
+    safe_color_enabled: true
+    max_color_shift: 0.07
+    safe_gain_min: 0.55
+    safe_gain_max: 1.75
+    color_risk_scale: 3.0
+    max_color_risk: 0.55
+    clamp_input_range: true
+    wb_max_shift: 0.1
+    enable_task_aware_rollback: true
+    rollback_hidden_dim: 64
+    rollback_min_alpha: 0.08
+    rollback_max_alpha: 0.97
+    rollback_granularity: stripe
+    rollback_num_stripes: 6
+    use_model_aware_residual: true
+    model_residual_hidden_dim: 64
+    model_residual_scale: 0.14
+    enable_coarse_task_grad: true
+    coarse_guidance_mode: safe
+    num_grad_variants: 0
+model:
+  backbone: osnet_ain_x1_0
+  local_extractor:
+    num_parts: 6
+    dropout: 0.1445104687920023
+  feature_fusion:
+    enabled: true
+    hidden_dim: 128
+    init_corrected_bias: 1.522561668453962
+    include_illum_stats: true
+    max_residual_scale: 0.38323241873715275
+  branch_attention_fusion:
+    enabled: true
+    hidden_dim: 128
+    num_branches: 3
+    temperature: 1.0
+    include_illum_stats: true
+  nuisance_head:
+    enabled: true
+    hidden_dim: 128
+    nuisance_dim: 64
+    photometric_dim: 4
+  illumination_module:
+    enabled: true
+training:
+  data_dir: data/processed/leopard/train
+  query_dir: data/processed/leopard/query
+  gallery_dir: data/processed/leopard/gallery
+  output_dir: checkpoints/tmm_glncd_v2_20260513/leopard/glncd_v2_global_only
+  num_classes: 291
+  image_height: 256
+  image_width: 256
+  image_size: 256
+  batch_size: 36
+  learning_rate: 0.00042
+  weight_decay: 0.0028
+  gradient_clip: 1.0
+  eval_interval: 5
+  pk_sampler:
+    enabled: true
+    p: 12
+    k: 3
+  center_loss:
+    enabled: true
+    weight: 0.0006
+    feat_dim: 256
+    lr_scale: 0.5
+  metric_learning:
+    ce_loss:
+      enabled: true
+      label_smoothing: 0.1
+      weight: 1.0
+    arcface_loss:
+      enabled: true
+      weight: 0.6900402544881828
+      s: 30.0
+      m: 0.26047016802581435
+    triplet_loss:
+      enabled: true
+      margin: 0.28
+      mining_type: soft
+      weight: 0.7476418864227931
+    circle_loss:
+      enabled: false
+      margin: 0.25
+      gamma: 256
+      weight: 0.0
+  iicl:
+    enabled: true
+    weight: 0.10961777917556528
+    temperature: 0.07
+    loss_type: cosine
+    num_variants: 2
+    num_grad_variants: 0
+    variant_type: data_driven
+    mix_ratio: 0.7
+  photo_prior:
+    initial_weight: 0.45
+    min_weight: 0.05
+    decay_power: 1.5
+  cross_light_prototype:
+    enabled: false
+    weight: 0.12
+  cross_light_margin_preserving:
+    enabled: false
+    weight: 0.12
+  cross_light_softap:
+    enabled: true
+    weight: 0.09405933542637661
+    similarity: cosine
+    photometric_scale: 8.0
+    photometric_offset: 0.1
+    min_positive_weight: 0.05
+    rank_temperature: 0.07
+    queue_size: 128
+  teacher_manifold:
+    enabled: true
+    tube_weight: 0.2102736659119131
+    separation_weight: 0.051268757626755396
+    similarity: cosine
+    photometric_scale: 8.0
+    photometric_offset: 0.1
+    min_positive_weight: 0.05
+    shrinkage: 0.8
+    orthogonal_weight: 1.0
+    subspace_rank: 1
+    min_radius: 0.02
+    margin: 0.08
+    queue_size: 128
+  ranking_topology:
+    enabled: false
+    weight: 0.0
+  anisotropic_identity_protection:
+    enabled: false
+    weight: 0.0
+  semantic_non_confusion:
+    enabled: false
+    weight: 0.0
+  nuisance_decoupling:
+    enabled: true
+    weight: 0.04
+    regression_weight: 0.0
+    decorrelation_weight: 0.5
+  teacher_prototype_anchor:
+    enabled: false
+    weight: 0.0
+  relative_class_structure:
+    enabled: false
+    weight: 0.0
+  feature_trust_region:
+    enabled: false
+    weight: 0.0
+  local_rank_preserving:
+    enabled: false
+    weight: 0.0
+  identity_image_preserving:
+    enabled: true
+    weight: 0.02
+  aux_gradient_gate:
+    enabled: true
+    eps: 1.0e-08
+  identity_preserving:
+    mode: softap
+    phase2_scale: 0.0
+    phase3_scale: 1.0
+    anchor_weight: 0.35
+    geometry_weight: 12.0
+    logit_weight: 0.03
+    detach_reference: true
+    teacher_temperature: 2.0
+    similarity: cosine
+    geometry_loss: mse
+  phases:
+    phase1:
+      name: backbone_warmup
+      epochs: 15
+      freeze_backbone: false
+      freeze_illumination: true
+      illumination_weight: 0.0
+      reid_weight: 1.0
+      backbone_lr: 0.00042
+    phase2:
+      name: fgid_warmup
+      epochs: 0
+      freeze_backbone: true
+      freeze_illumination: false
+      illumination_weight: 1.0
+      reid_weight: 0.0
+      illumination_lr: 0.0001
+    phase3:
+      name: joint_training
+      epochs: 60
+      batch_size: 36
+      use_backbone_checkpointing: true
+      freeze_backbone: false
+      freeze_illumination: false
+      illumination_weight: 0.19349536001821935
+      reid_weight: 1.0
+      illumination_lr: 7.4326191035463e-05
+      backbone_lr: 0.00022330111779098784
+      aux_ramp:
+        enabled: true
+        epochs: 8
+        illumination_start: 0.05
+        illumination_end: 0.19349536001821935
+        iicl_start: 0.0
+        iicl_end: 0.10961777917556528
+        cross_light_start: 0.0
+        cross_light_end: 0.09405933542637661
+  neighborhood_consistency:
+    enabled: true
+    weight: 0.075
+    temperature: 0.07
+    topk: 6
+    positive_weight: 1.0
+    negative_weight: 0.25
+    local_weight: 0.0
+    use_global: true
+    use_local: false
+    use_hard_negatives: true
+    teacher_target: reciprocal
+data_augmentation:
+  image_size: 256
+  random_horizontal_flip: 0.5
+  color_jitter:
+    brightness: 0.08047011684558637
+    contrast: 0.08315771630280638
+    saturation: 0.061734907630832385
+    hue: 0.015312632052798014
+  random_crop:
+    enabled: true
+    scale:
+    - 0.84
+    - 1.0
+    ratio:
+    - 0.85
+    - 1.18
+  random_erasing:
+    enabled: true
+    probability: 0.31529621526163004
+    scale:
+    - 0.02
+    - 0.2
+    ratio:
+    - 0.3
+    - 3.0
+  random_grayscale:
+    enabled: true
+    probability: 0.05
+  normalize:
+    mean:
+    - 0.485
+    - 0.456
+    - 0.406
+    std:
+    - 0.229
+    - 0.224
+    - 0.225
+evaluation:
+  eval_interval: 5
+  protocol: query_gallery
+  selection_query_dir: data/processed/leopard/selection_query
+  selection_gallery_dir: data/processed/leopard/selection_gallery
+  selection_info: data/processed/leopard/split_info.json
+  query_dir: data/processed/leopard/query
+  gallery_dir: data/processed/leopard/gallery
+  best_metric: mAP
+  strict_protocol_check: true
+  additional_protocols: []
+  reranking:
+    enabled: false
+    k1: 20
+    k2: 6
+    lambda_value: 0.3
+  feature_extraction:
+    flip_test: true
+    normalize: true
+    exclude_same_camera: false
+checkpointing:
+  save_interval: 5
+  max_keep: 6
+  save_best_only: false
+logging:
+  log_interval: 20
+  tensorboard: true
+  wandb:
+    enabled: false
+    project: tmm-leopard-match12g
+hardware:
+  device: cuda
+  num_workers: 4
+  use_amp: true
+  amp_dtype: bfloat16
+  use_backbone_checkpointing: true
+  use_ddp: false
+  pin_memory: true
+  prefetch_factor: 2
+paper_protocol:
+  source_dataset_protocol: match_aware_identity_disjoint_query_gallery
+  training_selection_protocol: self_defined_train_qg
+  final_report_protocol: query_gallery
+  selection_metric: mAP
+output_dir: checkpoints/tmm_glncd_v2_20260513/leopard/glncd_v2_global_only
+tmm_formal48g_source:
+  selected_trial_result: checkpoints/tuning/tmm_multifidelity_zebra_leopard_phase1_20260511_122703/leopard/trial_007/trial_result.json
+  local_selection_metrics:
+    rank1: 66.66666666666666
+    rank5: 80.0
+    rank10: 86.66666666666667
+    mAP: 38.87255722712366
+  local_proxy_score: 40.20589056045699
+  local_batch: 18
+  formal_batch: 36
+  lr_scaling: sqrt(formal_batch/local_batch) with dataset cap
+  lr_scale: 1.4142135623730951
+  formal_learning_rate: 0.00042
+  formal_phase3_backbone_lr: 0.00022330111779098784
+output:
+  checkpoint_dir: checkpoints/tmm_glncd_v2_20260513/leopard/glncd_v2_global_only
+  log_dir: checkpoints/tmm_glncd_v2_20260513/leopard/glncd_v2_global_only
+tmm_finalbestopt_20260512:
+  dataset: leopard
+  variant: low_wd_smooth
+  selection_protocol: fixed final query/gallery benchmark
+  best_metric: mAP
+  phase3_epochs: 45
+  speed_run_adjustment: '2026-05-12: remaining non-zebra variants shortened from 60
+    to 45 phase3 epochs for faster final-best search'
+accuracy_first_20260512:
+  applied: true
+  reason: User requested performance/accuracy over efficiency; extend phase3 and evaluate
+    final query/gallery more frequently.
+  phase3_epochs: 75
+  eval_interval: 2
+  selection_protocol: fixed final query/gallery
+  best_metric: mAP
+tmm_glncd_v2_20260513:
+  dataset: leopard
+  variant: glncd_v2_global_only
+  priority: main_ablation
+  rationale: remove local stripe neighborhood term
+  algorithm_change: GL-NCD v2 reciprocal/Jaccard global-local neighborhood distillation
+  baseline_config: config/tmm_finalbestopt_20260512/illumination_config_leopard_low_wd_smooth.yaml
+  selection_protocol: query_gallery
+  best_metric: mAP

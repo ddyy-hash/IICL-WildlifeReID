@@ -1,0 +1,156 @@
+# =============================================================================
+# =============================================================================
+#   - 58 query, 671 gallery
+#
+# =============================================================================
+
+# =============================================================================
+# =============================================================================
+illumination_module:
+  module_type: "IPAIDModule"
+  
+  loss_params:
+    lambda_recon: 1.0
+    lambda_smooth: 0.1
+    lambda_edge: 0.1
+    lambda_sensitivity: 0.02
+    lambda_identity: 0.1
+    
+  module_params:
+    base_channels: 48
+    num_scales: 4
+    refine_iterations: 3
+    use_sensitivity: true
+    use_refinement: true
+
+# =============================================================================
+# =============================================================================
+model:
+  backbone: "osnet_ain_x1_0"
+  pretrained: true
+  feature_dim: 512
+  
+  illumination_module:
+    enabled: true
+    method: "ipaid"
+  
+  local_extractor:
+    enabled: true
+    num_parts: 6
+    attention_type: "se"
+    pooling: "gem"
+    dropout: 0.5
+
+# =============================================================================
+# =============================================================================
+training:
+  data_dir: "data/processed/nyala/train"
+  query_dir: "data/processed/nyala/query"
+  gallery_dir: "data/processed/nyala/gallery"
+  output_dir: "checkpoints/joint_nyala_v2"
+  
+  num_classes: 179
+  batch_size: 24               # 8×3=24 (P×K)
+  image_height: 256
+  image_width: 256
+  num_workers: 4
+  
+  learning_rate: 0.00025
+  weight_decay: 0.0005
+  
+  pk_sampler:
+    enabled: true
+    p: 8
+    k: 3
+
+  # Center Loss
+  center_loss:
+    enabled: true
+    weight: 0.0005
+    feat_dim: 256
+    lr_scale: 0.5
+  
+  phases:
+    phase1:
+      name: "backbone_warmup"
+      epochs: 20
+      freeze_backbone: false
+      freeze_illumination: true
+      illumination_weight: 0.0
+      reid_weight: 1.0
+      lr_scheduler: "warmup_cosine"
+      warmup_epochs: 3
+      
+    phase2:
+      name: "joint_finetune"
+      epochs: 100
+      freeze_backbone: false
+      freeze_illumination: false
+      illumination_weight: 0.2
+      reid_weight: 1.0
+      lr_scheduler: "cosine"
+
+# =============================================================================
+# =============================================================================
+loss:
+  classification:
+    type: "arcface"
+    weight: 1.0
+    scale: 30.0
+    margin: 0.30
+    label_smooth: 0.15
+    
+  triplet:
+    enabled: false
+    weight: 0.0
+    margin: 0.3
+    
+  circle:
+    enabled: false
+    weight: 0.0
+    margin: 0.25
+    gamma: 256
+    
+  # IICL
+  iicl:
+    enabled: true
+    weight: 1.2
+    variants: 2
+
+# =============================================================================
+# =============================================================================
+evaluation:
+  eval_interval: 5
+  metrics: ["rank1", "rank5", "rank10", "mAP"]
+  reranking:
+    enabled: false
+    k1: 20
+    k2: 6
+    lambda_value: 0.3
+
+# =============================================================================
+# =============================================================================
+augmentation:
+  random_flip: true
+  random_crop: true
+  random_erasing:
+    enabled: true
+    probability: 0.6
+  color_jitter:
+    enabled: true
+    brightness: 0.25
+    contrast: 0.2
+    saturation: 0.15
+    hue: 0.08
+  normalize:
+    mean: [0.485, 0.456, 0.406]
+    std: [0.229, 0.224, 0.225]
+
+# =============================================================================
+# =============================================================================
+misc:
+  seed: 42
+  log_interval: 10
+  save_interval: 10
+  mixed_precision: true
+  gradient_clip: 1.0

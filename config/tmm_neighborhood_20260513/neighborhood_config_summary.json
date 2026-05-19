@@ -1,0 +1,34 @@
+[
+  {
+    "dataset": "leopard",
+    "variant": "low_wd_smooth_neighborhood",
+    "path": "E:/dog_web_now/dog_reid_web/config/tmm_neighborhood_20260513/illumination_config_leopard_low_wd_smooth_neighborhood.yaml",
+    "base": "config/tmm_finalbestopt_20260512/illumination_config_leopard_low_wd_smooth.yaml",
+    "output_dir": "checkpoints/tmm_neighborhood_20260513/leopard/low_wd_smooth_neighborhood",
+    "neighborhood_consistency": {
+      "enabled": true,
+      "weight": 0.075,
+      "temperature": 0.07,
+      "topk": 6,
+      "positive_weight": 1.0,
+      "negative_weight": 0.25,
+      "local_weight": 0.45
+    }
+  },
+  {
+    "dataset": "whaleshark",
+    "variant": "shark_k5_neighborhood",
+    "path": "E:/dog_web_now/dog_reid_web/config/tmm_neighborhood_20260513/illumination_config_whaleshark_shark_k5_neighborhood.yaml",
+    "base": "config/tmm_finalbestopt_20260512/illumination_config_whaleshark_shark_k5_metric.yaml",
+    "output_dir": "checkpoints/tmm_neighborhood_20260513/whaleshark/shark_k5_neighborhood",
+    "neighborhood_consistency": {
+      "enabled": true,
+      "weight": 0.09,
+      "temperature": 0.07,
+      "topk": 5,
+      "positive_weight": 1.0,
+      "negative_weight": 0.2,
+      "local_weight": 0.55
+    }
+  }
+]

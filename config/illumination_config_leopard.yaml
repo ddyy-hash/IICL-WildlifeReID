@@ -1,0 +1,219 @@
+# =============================================================================
+# =============================================================================
+#
+#   - mAP: 75-90%
+#
+# =============================================================================
+
+# =============================================================================
+# =============================================================================
+illumination_module:
+  module_type: "IPAIDModule"
+  
+  loss_params:
+    lambda_recon: 1.0
+    lambda_smooth: 0.15
+    lambda_edge: 0.12
+    lambda_sensitivity: 0.02
+    lambda_identity: 0.12
+    
+  module_params:
+    base_channels: 48
+    num_scales: 4
+    refine_iterations: 3
+    use_sensitivity: true
+    use_refinement: true
+
+# =============================================================================
+# =============================================================================
+model:
+  backbone: "osnet_ain_x1_0"
+  pretrained: true
+  feature_dim: 512
+  
+  illumination_module:
+    enabled: true
+    method: "ipaid"
+  
+  local_extractor:
+    enabled: true
+    num_parts: 6
+    attention_type: "se"
+    pooling: "gem"
+    dropout: 0.40
+
+# =============================================================================
+# =============================================================================
+training:
+  data_dir: "data/processed/leopard/train"
+  query_dir: "data/processed/leopard/query"
+  gallery_dir: "data/processed/leopard/gallery"
+  output_dir: "checkpoints/joint_leopard_osnet"
+  
+  num_classes: 299
+  batch_size: 32               # 8×4=32
+  image_height: 256
+  image_width: 256
+  num_workers: 4
+  
+  learning_rate: 0.00035
+  weight_decay: 0.02
+  
+  pk_sampler:
+    enabled: true
+    p: 8
+    k: 4
+
+  # Center Loss
+  center_loss:
+    enabled: true
+    weight: 0.0005
+    feat_dim: 256
+    lr_scale: 0.5
+  
+  phases:
+    phase1:
+      name: "backbone_warmup"
+      epochs: 10
+      freeze_backbone: false
+      freeze_illumination: true
+      illumination_weight: 0.0
+      reid_weight: 1.0
+      backbone_lr: 0.00035
+      warmup_epochs: 0
+      
+    phase2:
+      name: "joint_finetuning"
+      epochs: 80
+      freeze_backbone: false
+      illumination_weight: 0.35
+      reid_weight: 1.0
+      illumination_lr: 0.00008
+      backbone_lr: 0.00030
+      warmup_epochs: 0
+  
+  scheduler:
+    type: "CosineAnnealingWarmRestarts"
+    T_0: 30
+    T_mult: 2
+    eta_min: 0.000001
+  
+  gradient_clip: 1.0
+  
+  early_stopping:
+    enabled: true
+    patience: 20
+    monitor: "mAP"
+    min_delta: 0.003
+  
+  metric_learning:
+    ce_loss:
+      enabled: true
+      label_smoothing: 0.20
+      weight: 1.0
+    
+    arcface_loss:
+      enabled: true
+      weight: 0.5
+      s: 30.0
+      m: 0.25
+    
+    triplet_loss:
+      enabled: true
+      margin: 0.3
+      mining_type: "soft"
+      weight: 1.0
+    
+    circle_loss:
+      enabled: false
+      weight: 0.0
+    
+    center_loss:
+      enabled: true
+      weight: 0.0005
+
+  iicl:
+    enabled: true
+    weight: 1.8
+    temperature: 0.06
+    variants: 3
+    memory_size: 4096
+    momentum: 0.9
+
+# =============================================================================
+# =============================================================================
+data_augmentation:
+  random_horizontal_flip: 0.5
+  random_rotation: 20
+  
+  random_crop:
+    enabled: true
+    scale: [0.75, 1.0]
+    ratio: [0.75, 1.33]
+  
+  random_erasing:
+    enabled: true
+    probability: 0.5
+    scale: [0.04, 0.25]
+    ratio: [0.3, 3.3]
+  
+  color_jitter:
+    brightness: 0.45
+    contrast: 0.45
+    saturation: 0.25
+    hue: 0.08
+  
+  random_grayscale:
+    enabled: true
+    probability: 0.15
+  
+  normalize:
+    mean: [0.485, 0.456, 0.406]
+    std: [0.229, 0.224, 0.225]
+
+# =============================================================================
+# =============================================================================
+evaluation:
+  protocol: "query_gallery"
+  eval_interval: 5
+  
+  reranking:
+    enabled: false
+    k1: 20
+    k2: 6
+    lambda_value: 0.3
+  
+  feature_extraction:
+    flip_test: true
+    normalize: true
+
+# =============================================================================
+# =============================================================================
+output:
+  checkpoint_dir: "checkpoints/joint_leopard_osnet"
+  log_dir: "checkpoints/joint_leopard_osnet"
+
+checkpointing:
+  save_interval: 10
+  save_best_only: false
+  max_keep: 3
+
+logging:
+  log_interval: 20
+  tensorboard: true
+  wandb:
+    enabled: false
+    project: "leopard-reid"
+
+# =============================================================================
+# =============================================================================
+yolo:
+  enabled: false
+
+# =============================================================================
+# =============================================================================
+hardware:
+  device: "cuda"
+  num_workers: 4
+  pin_memory: true
+  prefetch_factor: 2

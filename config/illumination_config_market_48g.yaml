@@ -1,0 +1,259 @@
+# =============================================================================
+# Market-1501 (Person ReID) 48 GB single-GPU config
+# =============================================================================
+# Goal:
+#   - Keep the Market query-gallery protocol unchanged.
+#   - Keep the current OSNet + illumination branch training recipe unchanged.
+#   - Re-tune batch / PK / precision / phase budget for a 48 GB GPU.
+# =============================================================================
+
+illumination_module:
+  module_type: "IPAIDModule"
+
+  loss_params:
+    lambda_recon: 1.0
+    lambda_smooth: 0.15
+    lambda_edge: 0.08
+    lambda_sensitivity: 0.02
+    lambda_identity: 0.1
+    lambda_lab_chroma: 0.1
+    lambda_high_freq: 0.05
+
+  module_params:
+    base_channels: 32
+    num_scales: 3
+    refine_iterations: 2
+    use_sensitivity: true
+    use_refinement: true
+    use_feature_guided: true
+    use_color_illumination: true
+    backbone_mid_channels: 384
+    safe_color_enabled: true
+    max_color_shift: 0.08
+    safe_gain_min: 0.5
+    safe_gain_max: 1.6
+    color_risk_scale: 3.0
+    max_color_risk: 0.55
+
+training:
+  data_dir: "data/processed/market/train"
+  query_dir: "data/processed/market/query"
+  gallery_dir: "data/processed/market/gallery"
+  output_dir: "checkpoints/market_v2_48g"
+
+  batch_size: 128
+  image_height: 256
+  image_width: 128
+  image_size: 256
+  learning_rate: 0.00035
+  weight_decay: 0.01
+  eval_interval: 10
+  gradient_clip: 1.0
+
+  pk_sampler:
+    enabled: true
+    p: 32
+    k: 4
+
+  center_loss:
+    enabled: true
+    weight: 0.0005
+    feat_dim: 256
+    lr_scale: 0.5
+
+  phases:
+    phase1:
+      name: "backbone_warmup"
+      epochs: 15
+      batch_size: 128
+      p: 32
+      freeze_backbone: false
+      freeze_illumination: true
+      illumination_weight: 0.0
+      reid_weight: 1.0
+      backbone_lr: 0.00035
+
+    phase2:
+      name: "skip_pure_illum_phase"
+      # Align Market with the newer ATRW-style two-stage schedule:
+      # skip the standalone illumination-only stage and warm the auxiliaries
+      # inside joint training instead.
+      epochs: 0
+      freeze_backbone: true
+      freeze_illumination: false
+      illumination_weight: 1.0
+      reid_weight: 0.0
+      illumination_lr: 0.0001
+
+    phase3:
+      name: "joint_training"
+      # Keep the total budget unchanged after removing phase2.
+      epochs: 145
+      # Joint training carries gradients through both the illumination branch
+      # and the consistency path, so phase3 uses a smaller PK batch than phase1.
+      batch_size: 64
+      p: 16
+      use_backbone_checkpointing: true
+      freeze_backbone: false
+      freeze_illumination: false
+      illumination_weight: 0.2
+      reid_weight: 1.0
+      illumination_lr: 0.00005
+      backbone_lr: 0.000175
+      use_auto_weight: true
+      grl_warmup_epochs: 20
+      grl_max_lambda: 1.0
+      aux_ramp:
+        enabled: true
+        epochs: 15
+        illumination_start: 0.05
+        illumination_end: 0.2
+        iicl_start: 0.0
+        iicl_end: 0.10
+        cross_light_start: 0.0
+        cross_light_end: 0.12
+
+  early_stopping:
+    enabled: true
+    patience: 30
+    monitor: "mAP"
+    min_delta: 0.001
+
+  metric_learning:
+    ce_loss:
+      enabled: true
+      label_smoothing: 0.1
+      weight: 1.0
+
+    arcface_loss:
+      enabled: true
+      weight: 0.5
+      s: 30.0
+      m: 0.25
+
+    triplet_loss:
+      enabled: true
+      margin: 0.3
+      mining_type: "soft"
+      weight: 1.0
+
+    circle_loss:
+      enabled: false
+      margin: 0.25
+      gamma: 256
+      weight: 0.0
+
+    center_loss:
+      enabled: true
+      weight: 0.0005
+
+  iicl:
+    enabled: true
+    # Match the newer ATRW treatment: consistency is a late auxiliary rather
+    # than the main phase-3 driver on the auxiliary Market experiment.
+    weight: 0.10
+    temperature: 0.07
+    num_variants: 2
+    # Preserve consistency targets while avoiding variant-branch backprop in
+    # the memory-heavy joint stage.
+    num_grad_variants: 0
+    memory_size: 2048
+    momentum: 0.9
+    variant_type: "data_driven"
+    mix_ratio: 0.7
+
+  adversary:
+    enabled: true
+    num_conditions: 4
+
+  identity_preserving:
+    mode: "geometry"
+    phase2_scale: 0.0
+    phase3_scale: 0.35
+    anchor_weight: 1.0
+    geometry_weight: 0.5
+    logit_weight: 0.15
+    detach_reference: true
+    teacher_temperature: 2.0
+    similarity: "cosine"
+    geometry_loss: "mse"
+
+model:
+  backbone: "osnet_ain_x1_0"
+
+  local_extractor:
+    num_parts: 6
+    dropout: 0.0
+
+  illumination_module:
+    enabled: true
+
+data_augmentation:
+  random_horizontal_flip: 0.5
+  random_rotation: 15
+  random_crop:
+    enabled: true
+    scale: [0.85, 1.0]
+    ratio: [0.9, 1.1]
+  random_erasing:
+    enabled: true
+    probability: 0.5
+    scale: [0.02, 0.2]
+    ratio: [0.3, 3.3]
+
+  color_jitter:
+    brightness: 0.1
+    contrast: 0.1
+    saturation: 0.1
+    hue: 0.02
+
+  normalize:
+    mean: [0.485, 0.456, 0.406]
+    std: [0.229, 0.224, 0.225]
+
+evaluation:
+  eval_interval: 10
+  protocol: "query_gallery"
+  best_metric: "mAP"
+  strict_protocol_check: true
+  query_dir: "data/processed/market/query"
+  gallery_dir: "data/processed/market/gallery"
+
+  reranking:
+    enabled: false
+    k1: 20
+    k2: 6
+    lambda_value: 0.3
+
+  feature_extraction:
+    flip_test: true
+    normalize: true
+    exclude_same_camera: true
+
+checkpointing:
+  save_interval: 10
+  save_best_only: false
+  max_keep: 5
+
+logging:
+  log_interval: 100
+  tensorboard: true
+  wandb:
+    enabled: false
+    project: "market1501-reid-48g"
+    entity: null
+
+hardware:
+  device: "cuda"
+  num_workers: 12
+  pin_memory: true
+  prefetch_factor: 4
+  use_backbone_checkpointing: false
+  use_ddp: false
+  ddp_backend: "nccl"
+  ddp_find_unused_parameters: false
+  ddp_timeout_minutes: 30
+  use_amp: true
+  amp_dtype: "bfloat16"
+
+output_dir: "./checkpoints/market_v2_48g"

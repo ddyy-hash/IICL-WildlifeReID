@@ -1,0 +1,519 @@
+# ATRW Route-B configuration grounded in local dataset statistics.
+#
+# Local measurements from data/processed/atrw used for this config:
+# - train split: 107 IDs, 1887 images
+# - per-ID images: mean 17.64, std 13.79, CV 0.782, Gini 0.295
+# - 51 / 107 IDs have <= 12 images, so batch construction must protect positive pairs
+# - image size sample (n=3000): mean 640.8 x 410.3, median 587.5 x 362.0
+# - height / width: mean 0.67, median 0.62 -> landscape body layout dominates
+# - luminance mean (n=1000): mean 0.380, q10 0.111, q90 0.539 -> strong dark tail
+# - luminance std: mean 0.188, q90 0.287 -> substantial contrast variation
+# - patch unevenness: mean 0.118, q90 0.172 -> non-uniform illumination is common
+# - bright pixel ratio: mean 0.055, q90 0.162 -> highlight / overexposure exists but is not dominant
+# - mean saturation: 0.082 -> texture is stronger than vivid color, so color correction should be low-DOF
+
+illumination_module:
+  module_type: "IPAIDModule"
+
+  loss_params:
+    # Keep reconstruction as the anchor term so the learned correction stays inside a feasible image manifold.
+    lambda_recon: 1.0
+
+    # ATRW has real uneven lighting, so smoothness must regularize illumination without flattening local shadows.
+    # Since unevenness q90 is ~0.17, we set this below the old 0.15 to avoid over-smoothing task-useful structure.
+    lambda_smooth: 0.12
+
+    # Backward-compatible alias; current code uses lambda_structure as the effective structural term.
+    lambda_edge: 0.08
+
+    # Tiger identity depends on stripe continuity, so structure preservation should be stronger than generic edge priors.
+    lambda_structure: 0.12
+
+    # Dark-tail images are common, so keep sensitivity active but weakly regularized rather than forcing uniform sensitivity.
+    lambda_sensitivity: 0.02
+
+    # Identity-preserving term remains a boundary constraint, not the main objective.
+    lambda_identity: 0.30
+
+    # ATRW has low average saturation, so strong Lab chroma penalties would over-constrain useful adaptation.
+    lambda_lab_chroma: 0.03
+
+    # Stripe detail is identity-critical, but very dark images make pure high-frequency supervision noisy.
+    lambda_high_freq: 0.04
+
+    # Log-chroma is illumination-scale invariant, so it is more appropriate than a large Lab term for ATRW.
+    lambda_log_chroma: 0.06
+
+    # Use both chroma terms, but with log-chroma carrying more weight than Lab.
+    chroma_mode: "dual"
+
+  module_params:
+    # Small dataset -> keep illumination branch compact to control variance.
+    base_channels: 32
+
+    # Three scales are enough to cover global exposure, broad shadows, and local patches.
+    num_scales: 3
+
+    # One residual refinement step is a first-order correction around the rollback solution.
+    # This reduces drift versus repeated residual updates on a small dataset.
+    refine_iterations: 1
+
+    use_sensitivity: true
+    use_refinement: true
+    use_feature_guided: true
+    use_color_illumination: true
+
+    # ATRW color saturation is low and the dataset is small.
+    # A global white-balance head is better identified than a full local 3-channel illumination field.
+    color_illumination_mode: "global_white_balance"
+    species_type: "stripe"
+    backbone_mid_channels: 384
+
+    safe_color_enabled: true
+
+    # Low saturation + human-perception alignment goal -> keep per-channel deviation conservative.
+    max_color_shift: 0.06
+
+    # Dark q10 is ~0.11, so the model needs moderate brightening headroom.
+    # The upper bound stays < 2 to avoid unstable noise amplification in very dark patches.
+    safe_gain_min: 0.55
+    safe_gain_max: 1.75
+
+    # Let the gate see color risk, but cap rollback influence so correction does not collapse to the raw image too often.
+    color_risk_scale: 3.0
+    max_color_risk: 0.50
+
+    # RandomErasing can produce out-of-range values; refinement should still operate in a physical RGB range.
+    clamp_input_range: true
+
+    # Limit global white-balance log-gain to a modest range: exp(0.10) ~= 1.105.
+    wb_max_shift: 0.10
+
+    # Route B core.
+    enable_task_aware_rollback: true
+    rollback_hidden_dim: 64
+    rollback_min_alpha: 0.08
+    rollback_max_alpha: 0.97
+    rollback_granularity: "stripe"
+    rollback_num_stripes: 6
+    use_model_aware_residual: true
+    model_residual_hidden_dim: 64
+    model_residual_scale: 0.15
+    enable_coarse_task_grad: true
+    coarse_guidance_mode: "safe"
+
+    # With 48 GB VRAM and backbone checkpointing enabled, keep two gradient-carrying variants.
+    num_grad_variants: 2
+
+model:
+  backbone: "osnet_ain_x1_0"
+
+  local_extractor:
+    # For 256-pixel height, 6 stripes give about 42 px per stripe.
+    # This is enough to preserve flank / torso / leg structure without over-fragmenting the tiger body.
+    num_parts: 6
+
+    # Small but nonzero dropout because ATRW is low-sample and imbalanced.
+    dropout: 0.10
+
+  feature_fusion:
+    enabled: true
+
+    # The fusion gate only solves a low-dimensional trust-allocation problem; 128 hidden units are sufficient.
+    hidden_dim: 128
+
+    # Do not initialize too close to "fully trust corrected branch".
+    # sigmoid(1.5) ~= 0.82 gives corrected features a prior advantage but keeps raw rescue active from the start.
+    init_corrected_bias: 1.5
+
+    include_illum_stats: true
+    # Trust the corrected branch only as a bounded residual over raw features.
+    max_residual_scale: 0.35
+
+  branch_attention_fusion:
+    enabled: true
+    hidden_dim: 128
+    num_branches: 3
+    temperature: 1.0
+    include_illum_stats: true
+
+  nuisance_head:
+    enabled: true
+    hidden_dim: 128
+    nuisance_dim: 64
+    photometric_dim: 4
+
+  illumination_module:
+    enabled: true
+
+training:
+  # 256x384 matches ATRW's landscape body layout:
+  # 256 / 384 = 0.667, very close to the measured mean height/width ratio 0.67.
+  image_height: 256
+  image_width: 384
+  image_size: 256
+
+  # Batch size is set from both optimization and data statistics:
+  # P=8, K=4 -> 32 samples / batch, with enough identities for hard negatives and enough positives per ID.
+  # This matches the original single-48GB target setting and remains more paper-comparable than changing batch dynamics.
+  batch_size: 32
+
+  # ATRW is small and long-tailed, so keep decoupled weight decay relatively strong.
+  weight_decay: 0.01
+  gradient_clip: 1.0
+  # A1 tuning: evaluate more frequently so mmAP peaks are less likely to be missed.
+  eval_interval: 2
+  learning_rate: 0.00035
+
+  pk_sampler:
+    enabled: true
+    # All train IDs satisfy K=4; P=8 gives negative diversity without exhausting the 107-ID pool too quickly.
+    p: 8
+    k: 4
+
+  center_loss:
+    enabled: true
+    weight: 0.0005
+    feat_dim: 256
+    lr_scale: 0.5
+
+  metric_learning:
+    ce_loss:
+      enabled: true
+      # Mild smoothing helps under class imbalance without excessively blurring the posterior.
+      label_smoothing: 0.10
+      weight: 1.0
+
+    arcface_loss:
+      enabled: true
+      # A moderate angular margin gives cleaner class separation on 107 identities without over-tightening tails.
+      weight: 0.5
+      s: 30.0
+      m: 0.30
+
+    triplet_loss:
+      enabled: true
+      margin: 0.3
+      mining_type: "soft"
+      weight: 1.0
+
+    circle_loss:
+      enabled: false
+      margin: 0.25
+      gamma: 256
+      weight: 0.0
+
+  iicl:
+    enabled: true
+
+    # IICL is a supplementary invariance term, not the main objective.
+    weight: 0.10
+    temperature: 0.07
+    loss_type: "cosine"
+
+    # Two variants are enough because illumination variants are correlated; returns beyond 2 are weak.
+    # Keep the consistency target, but disable variant backprop so phase3 fits the 48 GB memory budget
+    # without changing the main batch statistics.
+    num_variants: 2
+    num_grad_variants: 0
+    variant_type: "data_driven"
+    mix_ratio: 0.7
+
+  # Route B principle: photometric priors start strong, then decay so model-level utility takes over.
+  photo_prior:
+    initial_weight: 0.45
+    min_weight: 0.05
+    decay_power: 1.5
+
+  cross_light_prototype:
+    enabled: false
+    # Keep the old prototype path disabled for this experiment; phase-3 identity regularization
+    # is now driven by explicit ranking margins rather than positive-only contraction.
+    weight: 0.12
+    similarity: "cosine"
+    photometric_scale: 8.0
+    photometric_offset: 0.10
+    min_gap_weight: 0.10
+
+  cross_light_margin_preserving:
+    enabled: false
+    # Keep the old pairwise ranking term available for ablations, but disable it in the
+    # new listwise phase-3 objective so optimization pressure is not dominated by a few pairs.
+    weight: 0.12
+    similarity: "cosine"
+    photometric_scale: 8.0
+    photometric_offset: 0.10
+    topk_positive: 2
+    topk_negative: 4
+    margin_delta: 0.02
+    beta: 12.0
+
+  cross_light_softap:
+    enabled: true
+    # Keep SoftAP as a weak listwise auxiliary under the teacher-manifold objective.
+    # It should stabilize retrieval ordering, but not overtake the manifold tube constraint.
+    weight: 0.12
+    similarity: "cosine"
+    photometric_scale: 8.0
+    photometric_offset: 0.10
+    min_positive_weight: 0.05
+    rank_temperature: 0.07
+    queue_size: 192
+
+  teacher_manifold:
+    enabled: true
+    # Main phase-3 geometry for the recovered version:
+    # keep corrected features inside a same-ID teacher tube while preserving negative margin.
+    tube_weight: 0.30
+    separation_weight: 0.10
+    similarity: "cosine"
+    photometric_scale: 8.0
+    photometric_offset: 0.10
+    min_positive_weight: 0.05
+    shrinkage: 0.80
+    orthogonal_weight: 1.00
+    subspace_rank: 1
+    min_radius: 0.02
+    margin: 0.08
+    queue_size: 192
+
+  ranking_topology:
+    enabled: false
+    # Keep the ranking-topology branch only for ablations.
+    # It is not active in the recovered teacher-manifold mainline.
+    weight: 0.18
+    similarity: "cosine"
+    photometric_scale: 8.0
+    photometric_offset: 0.10
+    min_positive_weight: 0.05
+    topk_positive: 2
+    topk_negative: 4
+    margin_slack: 0.01
+    beta: 12.0
+    queue_size: 192
+
+  anisotropic_identity_protection:
+    enabled: false
+    # Keep anisotropic protection only for ablations.
+    # The recovered mainline uses teacher-manifold tube + separation instead.
+    weight: 0.10
+    similarity: "cosine"
+    photometric_scale: 8.0
+    photometric_offset: 0.10
+    min_positive_weight: 0.05
+    topk_positive: 2
+    topk_negative: 4
+    subspace_rank: 1
+    identity_weight: 1.0
+    nuisance_weight: 0.5
+    nuisance_radius: 0.12
+
+  semantic_non_confusion:
+    enabled: false
+    # Teacher-manifold separation already provides the main semantic safety barrier here.
+    weight: 0.00
+    margin_delta: 0.02
+    squared: true
+
+  nuisance_decoupling:
+    enabled: true
+    # Keep only weak decorrelation pressure; remove direct photometric regression so the
+    # illumination branch is not forced back into a hand-designed human-observation space.
+    weight: 0.04
+    regression_weight: 0.0
+    decorrelation_weight: 0.5
+
+  teacher_prototype_anchor:
+    enabled: false
+    # Disable absolute class-center pulling for Route-B.
+    # It improved top-1 retrieval but over-contracted the cross-light class cloud and hurt mAP_cross.
+    weight: 0.0
+    metric: "cosine"
+
+  relative_class_structure:
+    enabled: false
+    # Disable the old teacher-shape constraint in the main run so listwise retrieval can
+    # reshape the corrected embedding without being over-tied to the raw teacher cloud.
+    weight: 0.0
+    metric: "mse"
+    radial_weight: 0.5
+
+  feature_trust_region:
+    enabled: false
+    # Disable trust-region tethering in the main run; semantic margin control is now handled
+    # explicitly by the teacher-logit barrier above.
+    weight: 0.0
+    base_radius: 0.10
+    adaptive_scale: 0.50
+    class_spread_scale: 1.0
+
+  local_rank_preserving:
+    enabled: false
+    # Disable the old local rank auxiliary so SoftAP remains the dominant retrieval signal.
+    weight: 0.0
+    alpha: 0.90
+    k_positive: 2
+    k_negative: 4
+
+  neighborhood_consistency:
+    enabled: false
+    # Disabled in the submitted ATRW mainline; enabled only for TMM expansion
+    # variants where the model is explicitly trained to internalize local
+    # nearest-neighbor calibration rather than relying on evaluation-time reranking.
+    weight: 0.08
+    temperature: 0.07
+    topk: 6
+    positive_weight: 1.0
+    negative_weight: 0.25
+    local_weight: 0.35
+    use_global: true
+    use_local: true
+    use_hard_negatives: true
+    teacher_target: "soft"
+
+  identity_image_preserving:
+    enabled: true
+    # Penalize identity-critical image changes only inside model-derived protected regions.
+    weight: 0.02
+
+  aux_gradient_gate:
+    enabled: true
+    eps: 1.0e-8
+
+  # Phase 3 is driven by teacher-manifold geometry, with SoftAP and weak nuisance decorrelation as auxiliaries.
+  identity_preserving:
+    mode: "softap"
+    phase2_scale: 0.0
+    phase3_scale: 1.00
+    anchor_weight: 0.35
+    geometry_weight: 12.0
+    logit_weight: 0.03
+    detach_reference: true
+    teacher_temperature: 2.0
+    similarity: "cosine"
+    geometry_loss: "mse"
+
+  phases:
+    phase1:
+      name: "backbone_warmup"
+      epochs: 15
+      freeze_backbone: false
+      freeze_illumination: true
+      illumination_weight: 0.0
+      reid_weight: 1.0
+      backbone_lr: 0.00035
+
+    phase2:
+      name: "fgid_warmup"
+      # Two-stage schedule: skip the old pure-photometric phase and warm auxiliaries inside joint training.
+      epochs: 0
+      freeze_backbone: true
+      freeze_illumination: false
+      illumination_weight: 1.0
+      reid_weight: 0.0
+      illumination_lr: 0.00010
+
+    phase3:
+      name: "joint_training"
+      # Keep the total budget at 81 epochs by folding the old 6-epoch phase2 into joint training.
+      epochs: 66
+      # Restore the original 8x4 PK structure so Route-B stays directly comparable to baseline.
+      batch_size: 32
+      # Keep checkpointing off in the earlier stages, then re-enable it only
+      # for the memory-heavy joint stage.
+      use_backbone_checkpointing: true
+      freeze_backbone: false
+      freeze_illumination: false
+      illumination_weight: 0.35
+      reid_weight: 1.0
+      illumination_lr: 0.00005
+      backbone_lr: 0.000175
+      aux_ramp:
+        enabled: true
+        epochs: 6
+        illumination_start: 0.05
+        illumination_end: 0.35
+        iicl_start: 0.00
+        iicl_end: 0.10
+        cross_light_start: 0.00
+        cross_light_end: 0.12
+
+data_augmentation:
+  random_horizontal_flip: 0.5
+
+  random_crop:
+    enabled: true
+    # Keep crop conservative: ATRW identity evidence is body-level stripe arrangement, not tiny local patches.
+    scale: [0.88, 1.0]
+
+  random_erasing:
+    enabled: true
+    # Erasing should regularize occlusion, not destroy stripe layout.
+    probability: 0.4
+    scale: [0.02, 0.15]
+    ratio: [0.3, 3.0]
+
+  color_jitter:
+    # Keep augmentation weaker than the illumination module itself.
+    brightness: 0.06
+    contrast: 0.08
+    saturation: 0.05
+    hue: 0.01
+
+  normalize:
+    mean: [0.485, 0.456, 0.406]
+    std: [0.229, 0.224, 0.225]
+
+evaluation:
+  eval_interval: 2
+
+  # Use the official ATRW open-set script logic for primary model selection.
+  # This keeps joint_best aligned with the target deployment scenario.
+  protocol: "atrw_openset"
+
+  # Also report the local closed-set split during training for engineering tracking.
+  # It does not control joint_best selection here; it is logged as an auxiliary protocol.
+  additional_protocols:
+    - "atrw_closedset_train70_val30"
+
+  best_metric: "mmAP"
+  strict_protocol_check: true
+
+  # Recommended supplementary post-processing for paper reporting.
+  # Keep disabled in the default config so joint_best selection remains plain and directly interpretable.
+  reranking:
+    enabled: false
+    k1: 25
+    k2: 6
+    lambda_value: 0.2
+
+  atrw:
+    data_root: "orignal_data/Amur Tiger Re-identification"
+    test_dir: null
+    eval_script_dir: "ATRWEvalScript-main"
+    # Single-card 48 GB evaluation can use a larger batch for faster reporting.
+    batch_size: 64
+    num_workers: 4
+    train_ratio: 0.7
+    seed: 42
+
+  feature_extraction:
+    flip_test: true
+    normalize: true
+    exclude_same_camera: false
+
+checkpointing:
+  save_interval: 10
+  max_keep: 5
+
+hardware:
+  num_workers: 4
+  use_backbone_checkpointing: false
+  use_ddp: false
+  ddp_backend: "nccl"
+  ddp_find_unused_parameters: false
+  ddp_timeout_minutes: 30
+  use_amp: true
+  amp_dtype: "bfloat16"
+
+output_dir: "./checkpoints/atrw_routeb_softap"

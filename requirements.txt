@@ -5,8 +5,8 @@ opencv-python
 Pillow
 PyYAML
 seaborn
-# 建议根据官方指引单独安装 PyTorch GPU 版
-# 例如（CUDA 11.8）：
+# Install the matching PyTorch build for your CUDA stack separately.
+# Example:
 #   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
 torch
 torchreid
@@ -15,3 +15,4 @@ tqdm
 WTForms
 ultralytics
 gdown
+pytest

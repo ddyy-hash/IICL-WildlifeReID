@@ -1,0 +1,191 @@
+# =============================================================================
+# =============================================================================
+# =============================================================================
+
+# =============================================================================
+# =============================================================================
+illumination_module:
+  module_type: "none"
+  
+  loss_params:
+    lambda_recon: 0.0
+    lambda_smooth: 0.0
+    lambda_edge: 0.0
+    lambda_sensitivity: 0.0
+    lambda_identity: 0.0
+
+# =============================================================================
+# =============================================================================
+model:
+  backbone: "osnet_ain_x1_0"
+  pretrained: true
+  feature_dim: 512
+  
+  illumination_module:
+    enabled: false
+    method: "none"
+  
+  local_extractor:
+    enabled: true
+    num_parts: 4
+    attention_type: "se"
+    pooling: "gem"            # Generalized Mean Pooling
+
+# =============================================================================
+# =============================================================================
+training:
+  data_dir: "data/processed/duke/train"
+  query_dir: "data/processed/duke/query"
+  gallery_dir: "data/processed/duke/gallery"
+  output_dir: "checkpoints/joint_duke_no_ipaid"
+  
+  num_classes: 702
+  batch_size: 112
+  num_epochs: 120
+  
+  image_height: 256
+  image_width: 128
+  
+  pk_sampler:
+    enabled: true
+    p: 28
+    k: 4
+  
+  phase1:
+    epochs: 10
+    freeze_backbone: false
+    freeze_illumination: true
+    lr: 3.5e-4
+  
+  phase2:
+    epochs: 110
+    freeze_backbone: false
+    freeze_illumination: true
+    lr: 3.5e-4
+    batch_size: 112
+    gradient_accumulation: 1
+  
+  phases:
+    phase1:
+      backbone_lr: 3.5e-4
+    phase2:
+      backbone_lr: 3.5e-4
+      illumination_lr: 0.0    # N/A
+  
+  iicl:
+    enabled: false
+    weight: 0.0
+    num_variants: 0
+  
+  optimizer:
+    name: "adam"
+    lr: 3.5e-4
+    weight_decay: 5e-4
+    adam_betas: [0.9, 0.999]
+  
+  lr_scheduler:
+    name: "warmup_cosine"
+    warmup_epochs: 10
+    warmup_factor: 0.01
+    min_lr: 1e-6
+  
+  metric_learning:
+    ce_loss:
+      enabled: true
+      label_smoothing: 0.2
+      weight: 0.5
+    
+    arcface_loss:
+      enabled: true
+      weight: 0.3
+      s: 30.0
+      m: 0.3
+    
+    triplet_loss:
+      enabled: true
+      margin: 0.3
+      mining_type: "soft"
+      weight: 1.5
+    
+    circle_loss:
+      enabled: true
+      margin: 0.25
+      gamma: 256
+      weight: 0.5
+    
+    # Center Loss
+    center_loss:
+      enabled: true
+      weight: 0.0005
+
+# =============================================================================
+# =============================================================================
+data_augmentation:
+  random_horizontal_flip: 0.5
+  random_rotation: 15
+  random_crop:
+    enabled: true
+    scale: [0.85, 1.0]
+    ratio: [0.85, 1.15]
+  random_erasing:
+    enabled: true
+    probability: 0.5
+    scale: [0.02, 0.4]
+    ratio: [0.3, 3.3]
+  
+  color_jitter:
+    brightness: 0.2
+    contrast: 0.2
+    saturation: 0.2
+    hue: 0.1
+  
+  normalize:
+    mean: [0.485, 0.456, 0.406]
+    std: [0.229, 0.224, 0.225]
+
+# =============================================================================
+# =============================================================================
+evaluation:
+  eval_interval: 5
+  reranking:
+    enabled: false
+    k1: 20
+    k2: 6
+    lambda_value: 0.3
+  
+  feature_extraction:
+    flip_test: true
+    normalize: true
+
+# =============================================================================
+# =============================================================================
+checkpointing:
+  save_interval: 10
+  save_best_only: false
+  max_keep: 5
+
+# =============================================================================
+# =============================================================================
+logging:
+  log_interval: 20
+  tensorboard: true
+  wandb:
+    enabled: false
+    project: "duke-reid-no-ipaid"
+    entity: null
+
+# =============================================================================
+# =============================================================================
+yolo:
+  model_path: "fea_data/yolov8m-seg.pt"
+  conf_threshold: 0.3
+  iou_threshold: 0.5
+  use_soft_mask: false
+
+# =============================================================================
+# =============================================================================
+hardware:
+  device: "cuda"
+  num_workers: 4
+  pin_memory: true
+  prefetch_factor: 2
