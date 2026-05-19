@@ -8,6 +8,11 @@ instance/
 tmp/
 checkpoints/
 fea_data/
+paper/
+references/
+rebuttal_materials/
+writing_materials/
+supplementary_package_*/
 
 # Logs and runtime state
 *.log
