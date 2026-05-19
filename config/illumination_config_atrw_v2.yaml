@@ -243,7 +243,7 @@ output_dir: "./checkpoints/atrw_v2"
 #
 #
 #
-# python tools/train_joint_reid.py \
+# python tools/train_joint.py \
 #   --config config/illumination_config_atrw_v2.yaml \
 #   --device cuda
 #

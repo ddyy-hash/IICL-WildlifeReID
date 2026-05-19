@@ -340,7 +340,7 @@ tmm_finalbestopt_20260512:
     to 45 phase3 epochs for faster final-best search'
 accuracy_first_20260512:
   applied: true
-  reason: User requested performance/accuracy over efficiency; extend phase3 and evaluate
+  reason: Accuracy-focused setting with extended phase3 evaluation
     final query/gallery more frequently.
   phase3_epochs: 75
   eval_interval: 2

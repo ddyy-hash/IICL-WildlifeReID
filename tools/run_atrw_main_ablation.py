@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the paper-oriented ATRW main ablation with official open-set evaluation."""
+"""Run the standard-protocol ATRW main ablation with official open-set evaluation."""
 
 from __future__ import annotations
 
@@ -785,7 +785,7 @@ def _select_variants(requested: str) -> List[str]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run the ATRW paper-oriented main ablation")
+    parser = argparse.ArgumentParser(description="Run the ATRW standard-protocol main ablation")
     parser.add_argument("--config", type=str, default="config/illumination_config_atrw.yaml", help="Source ATRW config")
     parser.add_argument("--data_dir", type=str, required=True, help="ATRW train directory")
     parser.add_argument(

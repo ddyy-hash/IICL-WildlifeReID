@@ -1,7 +1,7 @@
 """Metric-learning losses used by the packaged ReID models.
 
 The module includes triplet, ArcFace, Circle, contrastive, center, and simple
-multi-task weighting helpers used by the paper-facing training code.
+multi-task weighting helpers used by the reporting-oriented training code.
 """
 
 import torch

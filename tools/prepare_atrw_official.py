@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare the official ATRW train/query/gallery split used by the paper package."""
+"""Prepare the official ATRW train/query/gallery split used by the public evaluation package."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ OUTPUT_ROOT = os.path.join(PROJECT_ROOT, "data", "processed")
 
 
 def prepare_atrw_official() -> None:
-    """Create the official paper-facing ATRW split from the raw data bundle."""
+    """Create the official reporting-oriented ATRW split from the raw data bundle."""
     train_images_dir = os.path.join(
         ORIGINAL_ROOT,
         "Amur Tiger Re-identification",

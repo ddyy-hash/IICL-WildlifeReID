@@ -646,7 +646,7 @@ def _build_gzgc_zebra_job(method_key: str, output_root: Path, device: str, *, sk
         official_protocol=False,
         note=(
             "Frozen perceptual enhancer baseline: images are enhanced offline before training and evaluation. "
-            "Checkpoint choice keeps the same internal held-out query/gallery split as the paper-oriented cross-species runner."
+            "Checkpoint choice keeps the same internal held-out query/gallery split as the standard-protocol cross-species runner."
         ),
     )
     derived.setdefault("paper_protocol", {})["selection_info"] = runtime["selection_info"]

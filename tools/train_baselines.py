@@ -662,7 +662,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--all-backbones",
         action="store_true",
-        help="Run all paper baselines: osnet_ain_x1_0, osnet_x1_0, resnet50",
+        help="Run all standard baselines: osnet_ain_x1_0, osnet_x1_0, resnet50",
     )
     parser.add_argument("--total_epochs", type=int, default=None, help="Override total baseline epochs")
     parser.add_argument("--batch_size", type=int, default=None, help="Override batch size before derivation")
@@ -714,7 +714,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--strict_plain_reid",
         action="store_true",
-        help="Use the ACM-MM paper strict plain-global ReID baseline derivation.",
+        help="Use the standard strict plain-global ReID baseline derivation.",
     )
     return parser
 

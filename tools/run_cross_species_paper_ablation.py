@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the paper-oriented cross-species query-gallery ablation."""
+"""Run the standard-protocol cross-species query-gallery ablation."""
 
 from __future__ import annotations
 
@@ -761,7 +761,7 @@ def _write_summary(output_root: Path, results: List[Dict[str, Any]]) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run the paper-oriented cross-species fixed query-gallery ablation")
+    parser = argparse.ArgumentParser(description="Run the standard-protocol cross-species fixed query-gallery ablation")
     parser.add_argument("--datasets", type=str, default="all", help="Comma-separated dataset keys or 'all'")
     parser.add_argument("--variants", type=str, default="all", help="Comma-separated variant keys or 'all'")
     parser.add_argument(
@@ -772,7 +772,7 @@ def main() -> None:
     )
     parser.add_argument("--device", type=str, default="cuda", help="Training / eval device")
     parser.add_argument("--num_workers", type=int, default=4, help="Training dataloader workers")
-    parser.add_argument("--backbone", type=str, default=DEFAULT_BACKBONE, help="Fixed paper backbone")
+    parser.add_argument("--backbone", type=str, default=DEFAULT_BACKBONE, help="Fixed reporting backbone")
     parser.add_argument(
         "--baseline_head",
         type=str,
